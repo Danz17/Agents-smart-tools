@@ -1,0 +1,10 @@
+======================================================================
+MIKROTIK ROUTER CONFIGURATION ANALYSIS REPORT
+======================================================================
+
+Router: Annex-4
+Version: 7.20.6 (stable)
+Export Date: 2025-12-14T09:19:45.258127
+
+Issues: 0
+Recommendations: 1

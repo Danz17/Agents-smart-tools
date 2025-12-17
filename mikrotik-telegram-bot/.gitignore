@@ -1,0 +1,83 @@
+# MikroTik Telegram Bot - Git Ignore
+
+# Sensitive configuration files
+**/bot-config-local.rsc
+**/*-config-overlay*.rsc
+**/secrets.txt
+**/tokens.txt
+
+# Backup files
+*.backup
+*backup*.rsc
+*.bak
+*.old
+
+# RouterOS files
+*.npk
+*.rif
+*.auto.rsc
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+*~
+.DS_Store
+Thumbs.db
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Desktop.ini
+
+# Python (if you add any Python tools)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+
+# Node.js (if you add any Node tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Documentation build artifacts
+docs/_build/
+site/
+
+# Test files
+test-config.rsc
+test-*.rsc
+
+# Personal notes
+notes.txt
+todo.txt
+scratch.txt
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+

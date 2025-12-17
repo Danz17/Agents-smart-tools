@@ -1,0 +1,15 @@
+# RouterOS Commands to Enable API Service on Port 8728
+# Copy and paste these commands into MikroTik Terminal (Winbox or WebFig)
+
+# Set API port to 8728
+/ip service set [find name=api] port=8728
+
+# Enable API service
+/ip service enable api
+
+# Verify API service is enabled
+/ip service print where name=api
+
+# Optional: Allow API from all interfaces (if needed)
+/ip firewall filter add chain=input action=accept protocol=tcp dst-port=8728 comment="Allow RouterOS API"
+

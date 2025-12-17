@@ -1,0 +1,105 @@
+# RouterOS Commands to Fix Hotspot Login Enforcement
+# IMPORTANT: This preserves admin network "Nazi" WiFi (10.1.1.0/24) full access
+# Only hotspot "Bawal Balik" (10.1.2.0/24) requires authentication
+
+# ============================================================================
+# ⚠️ SAFETY: Run commands in this exact order to prevent lockout!
+# ============================================================================
+
+# ============================================================================
+# STEP 1: Add ADMIN network rule FIRST (BEFORE disabling anything!)
+# ============================================================================
+# This ensures your admin access is preserved throughout the process
+# Admin network (10.1.1.0/24) - "Nazi" WiFi - FULL ACCESS
+
+/ip firewall filter add chain=forward action=accept src-address=10.1.1.0/24 out-interface-list=WAN comment="allow-admin-network-full-access" place-before=0
+
+# Wait 2-3 seconds for rule to take effect (optional but recommended)
+# (Just pause before running next commands)
+
+# ============================================================================
+# STEP 2: Add authenticated HOTSPOT rules (before blocking)
+# ============================================================================
+
+# Allow authenticated hotspot users (10.1.2.0/24) to access WAN
+/ip firewall filter add chain=forward action=accept in-interface=bridge-hotspot out-interface-list=WAN hotspot=auth comment="allow-authenticated-hotspot-to-wan" place-before=0
+
+# Allow established/related connections for authenticated users
+/ip firewall filter add chain=forward action=accept in-interface=bridge-hotspot connection-state=established,related hotspot=auth comment="allow-authenticated-established" place-before=0
+
+# ============================================================================
+# STEP 3: NOW safely disable problematic rule (admin access is secured)
+# ============================================================================
+
+# Find the rule that allows all LAN->WAN (bypasses hotspot auth)
+/ip firewall filter print where chain=forward and in-interface-list=LAN and out-interface-list=WAN
+
+# Disable the problematic rule (SAFE NOW because admin rule is already active)
+/ip firewall filter set [find chain=forward in-interface-list=LAN out-interface-list=WAN !src-address !hotspot] disabled=yes
+
+# ============================================================================
+# STEP 4: Block unauthenticated HOTSPOT traffic
+# ============================================================================
+# Block all unauthenticated traffic from hotspot interface (ONLY affects 10.1.2.0/24)
+# This does NOT affect admin network (10.1.1.0/24) - your access is safe!
+
+/ip firewall filter add chain=forward action=drop in-interface=bridge-hotspot hotspot=!auth comment="block-unauthenticated-hotspot" place-before=0
+
+# ============================================================================
+# STEP 5: Ensure NAT redirect rules exist
+# ============================================================================
+
+# Check existing redirect rules
+/ip firewall nat print where chain=dstnat and in-interface=wifi2-hotspot
+
+# Add HTTP redirect if missing
+/ip firewall nat add chain=dstnat action=redirect in-interface=wifi2-hotspot protocol=tcp dst-port=80 to-ports=80 comment="hotspot-http-redirect" place-before=0
+
+# Add HTTPS redirect if missing
+/ip firewall nat add chain=dstnat action=redirect in-interface=wifi2-hotspot protocol=tcp dst-port=443 to-ports=80 comment="hotspot-https-redirect" place-before=0
+
+# ============================================================================
+# STEP 6: Enable hotspot if disabled
+# ============================================================================
+
+/ip hotspot enable [find name=hotspot1]
+
+# ============================================================================
+# STEP 7: Verify configuration and admin access
+# ============================================================================
+
+# Verify admin network rule is active (IMPORTANT!)
+/ip firewall filter print where src-address=10.1.1.0/24
+# Should show a rule with action=accept and disabled=no
+
+# Check hotspot status
+/ip hotspot print
+
+# Check firewall rules
+/ip firewall filter print where in-interface=wifi2-hotspot
+
+# Check NAT rules
+/ip firewall nat print where in-interface=wifi2-hotspot
+
+# ============================================================================
+# OPTIONAL: Configure DNS
+# ============================================================================
+
+# Set DNS servers (adds Google and Cloudflare DNS)
+/ip dns set servers=8.8.8.8,1.1.1.1
+
+# ============================================================================
+# SAFETY NOTES:
+# ============================================================================
+# ✅ Admin network rule is added FIRST - your access is preserved
+# ✅ Admin network (10.1.1.0/24) has FULL access throughout the process
+# ✅ You will NOT lose access if commands are run in order
+# 
+# After applying these rules:
+# 1. Admin network "Nazi" WiFi (10.1.1.0/24) - FULL ACCESS, unlimited speed
+# 2. Hotspot "Bawal Balik" WiFi (10.1.2.0/24) - blocked until authentication
+# 3. Users redirected to hotspot login page when opening browser
+# 4. Authenticated hotspot users can access internet normally
+# 
+# If you lose access, see ROLLBACK_COMMANDS.txt for emergency recovery
+

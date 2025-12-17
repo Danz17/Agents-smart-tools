@@ -1,0 +1,5 @@
+{
+    "routeroslsp.baseUrl": "http://10.1.1.1",
+    "routeroslsp.password": "admin123",
+    "routeroslsp.username": "admin"
+}
