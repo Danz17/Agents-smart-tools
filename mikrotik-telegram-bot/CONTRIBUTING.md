@@ -97,8 +97,8 @@ Have an idea? We'd love to hear it!
 
 1. **Fork the repository**
    ```bash
-   git clone https://github.com/yourusername/mikrotik-telegram-bot.git
-   cd mikrotik-telegram-bot
+git clone https://github.com/Danz17/Agent.git
+cd Agent/mikrotik-telegram-bot
    ```
 
 2. **Create a branch**

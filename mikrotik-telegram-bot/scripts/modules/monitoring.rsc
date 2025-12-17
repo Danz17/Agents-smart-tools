@@ -1,6 +1,6 @@
 #!rsc by RouterOS
 # MikroTik Telegram Bot - Monitoring Module
-# https://github.com/yourusername/mikrotik-telegram-bot
+# https://github.com/Danz17/Agent/tree/main/mikrotik-telegram-bot
 #
 # requires RouterOS, version=7.15
 #

@@ -182,5 +182,5 @@ We welcome contributions! Please see our contributing guidelines for:
 
 ---
 
-[1.0.0]: https://github.com/yourusername/mikrotik-telegram-bot/releases/tag/v1.0.0
+[1.0.0]: https://github.com/Danz17/Agent/releases/tag/v1.0.0
 
