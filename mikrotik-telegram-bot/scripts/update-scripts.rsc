@@ -2,68 +2,78 @@
 # MikroTik Telegram Bot - Script Updater
 # https://github.com/Danz17/Agents-smart-tools/tree/main/mikrotik-telegram-bot
 #
-# Quick script to update all bot scripts from GitHub
+# Based on patterns from https://github.com/eworm-de/routeros-scripts
+# Run: /tool fetch url="https://raw.githubusercontent.com/Danz17/Agents-smart-tools/main/mikrotik-telegram-bot/scripts/update-scripts.rsc" dst-path=update-scripts.rsc; /import update-scripts.rsc
 
-:put "=========================================="
-:put "MikroTik Telegram Bot - Script Updater"
-:put "=========================================="
-:put ""
+:local ScriptName "update-scripts";
+:local BaseURL "https://raw.githubusercontent.com/Danz17/Agents-smart-tools/main/mikrotik-telegram-bot/scripts";
 
-:local BaseURL "https://raw.githubusercontent.com/Danz17/Agents-smart-tools/main/mikrotik-telegram-bot/scripts"
+:put "==========================================";
+:put "MikroTik Telegram Bot - Script Updater";
+:put "==========================================";
+:put "";
 
-# Scripts to update
-:local Scripts ({
-  {name="bot-config"; path="bot-config.rsc"};
-  {name="bot-core"; path="bot-core.rsc"};
-  {name="modules/backup"; path="modules/backup.rsc"};
-  {name="modules/monitoring"; path="modules/monitoring.rsc"};
-  {name="modules/custom-commands"; path="modules/custom-commands.rsc"};
-  {name="modules/wireless-monitoring"; path="modules/wireless-monitoring.rsc"};
-  {name="modules/daily-summary"; path="modules/daily-summary.rsc"};
-});
+# Script list: name and file path
+:local ScriptList {
+  "bot-config"="bot-config.rsc";
+  "bot-core"="bot-core.rsc";
+  "modules/backup"="modules/backup.rsc";
+  "modules/monitoring"="modules/monitoring.rsc";
+  "modules/custom-commands"="modules/custom-commands.rsc";
+  "modules/wireless-monitoring"="modules/wireless-monitoring.rsc";
+  "modules/daily-summary"="modules/daily-summary.rsc"
+};
 
-:local UpdatedCount 0;
-:local FailedCount 0;
+:local UpdateCount 0;
+:local CreateCount 0;
+:local FailCount 0;
 
-:foreach Script in=$Scripts do={
-  :local ScriptName ($Script->"name");
-  :local ScriptPath ($Script->"path");
-  :local URL ($BaseURL . "/" . $ScriptPath);
-  :local TempFile ("update-" . $ScriptName . ".rsc");
+:foreach ScriptItem,FilePath in=$ScriptList do={
+  :local URL ($BaseURL . "/" . $FilePath);
+  :put ("Processing: " . $ScriptItem);
   
-  :put ("Updating: " . $ScriptName . "...");
-  
-  :onerror FetchErr {
-    /tool/fetch url=$URL dst-path=$TempFile;
-    :delay 1s;
+  :onerror FetchError {
+    :local ScriptContent ([ /tool/fetch check-certificate=no $URL output=user as-value ]->"data");
     
-    :if ([:len [/file find where name=$TempFile]] > 0) do={
-      :local ScriptContent [/file get $TempFile contents];
-      
-      # Check if script exists, create if not
-      :if ([:len [/system script find where name=$ScriptName]] = 0) do={
-        /system script add name=$ScriptName owner=admin policy=ftp,read,write,policy,test,password,sniff,sensitive,romon source=$ScriptContent;
-        :put ("  ✓ Created: " . $ScriptName);
+    :if ([:len $ScriptContent] > 100) do={
+      :if ([:len [ /system/script/find where name=$ScriptItem ]] > 0) do={
+        /system/script/set $ScriptItem source=$ScriptContent;
+        :put ("  Updated: " . $ScriptItem);
+        :set UpdateCount ($UpdateCount + 1);
       } else={
-        /system script set $ScriptName source=$ScriptContent;
-        :put ("  ✓ Updated: " . $ScriptName);
+        /system/script/add name=$ScriptItem owner=admin \
+          policy=ftp,read,write,policy,test,password,sniff,sensitive,romon \
+          source=$ScriptContent;
+        :put ("  Created: " . $ScriptItem);
+        :set CreateCount ($CreateCount + 1);
       }
-      
-      /file remove $TempFile;
-      :set UpdatedCount ($UpdatedCount + 1);
     } else={
-      :put ("  ✗ Failed: File not downloaded");
-      :set FailedCount ($FailedCount + 1);
+      :put ("  FAILED: Empty or invalid content");
+      :set FailCount ($FailCount + 1);
     }
   } do={
-    :put ("  ✗ Failed: " . $FetchErr);
-    :set FailedCount ($FailedCount + 1);
+    :put ("  FAILED: " . $FetchError);
+    :set FailCount ($FailCount + 1);
   }
 }
 
-:put ""
-:put "=========================================="
-:put ("Updated: " . $UpdatedCount . ", Failed: " . $FailedCount)
-:put "=========================================="
-:put ""
-:put "Run: /system script run bot-config"
+:put "";
+:put "==========================================";
+:put ("Created: " . $CreateCount . ", Updated: " . $UpdateCount . ", Failed: " . $FailCount);
+:put "==========================================";
+
+:if ($FailCount = 0) do={
+  :put "";
+  :put "SUCCESS! Now configure your bot:";
+  :put "";
+  :put ":global TelegramTokenId \"YOUR_BOT_TOKEN\"";
+  :put ":global TelegramChatId \"YOUR_CHAT_ID\"";
+  :put ":global TelegramChatIdsTrusted \"YOUR_CHAT_ID\"";
+  :put ":global BotConfigReady true";
+  :put "";
+  :put "Then run: /system script run bot-config";
+  :put "And test: /system script run bot-core";
+} else={
+  :put "";
+  :put "Some scripts failed. Check network connectivity.";
+}
