@@ -97,7 +97,7 @@ Have an idea? We'd love to hear it!
 
 1. **Fork the repository**
    ```bash
-git clone https://github.com/Danz17/Agent.git
+git clone https://github.com/Danz17/Agents-smart-tools.git
 cd Agent/mikrotik-telegram-bot
    ```
 

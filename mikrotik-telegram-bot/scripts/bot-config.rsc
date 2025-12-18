@@ -1,6 +1,6 @@
 #!rsc by RouterOS
 # MikroTik Telegram Bot - Configuration
-# https://github.com/Danz17/Agent/tree/main/mikrotik-telegram-bot
+# https://github.com/Danz17/Agents-smart-tools/tree/main/mikrotik-telegram-bot
 #
 # requires RouterOS, version=7.15
 #
@@ -280,7 +280,7 @@
 # 3. Or run it: /system script run bot-config
 #
 # For help and documentation:
-# https://github.com/Danz17/Agent/tree/main/mikrotik-telegram-bot
+# https://github.com/Danz17/Agents-smart-tools/tree/main/mikrotik-telegram-bot
 #
 # Based on RouterOS Scripts by eworm-de:
 # https://github.com/eworm-de/routeros-scripts

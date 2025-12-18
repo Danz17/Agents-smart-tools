@@ -1,6 +1,6 @@
 #!rsc by RouterOS
 # MikroTik Telegram Bot - Daily Summary Module
-# https://github.com/Danz17/Agent/tree/main/mikrotik-telegram-bot
+# https://github.com/Danz17/Agents-smart-tools/tree/main/mikrotik-telegram-bot
 #
 # requires RouterOS, version=7.15
 #

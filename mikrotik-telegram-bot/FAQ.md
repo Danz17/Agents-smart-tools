@@ -532,5 +532,5 @@ License: GPL-3.0
 
 ---
 
-**Still have questions?** Ask in the [Telegram Group](https://t.me/routeros_scripts) or open a [GitHub Discussion](https://github.com/Danz17/Agent/discussions).
+**Still have questions?** Ask in the [Telegram Group](https://t.me/routeros_scripts) or open a [GitHub Discussion](https://github.com/Danz17/Agents-smart-tools/discussions).
 
