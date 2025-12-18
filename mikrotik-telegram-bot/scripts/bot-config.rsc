@@ -191,6 +191,22 @@
 })
 
 # ============================================================================
+# RUNTIME STATE (initialized if missing)
+# ============================================================================
+
+:global CommandRateLimitTracker;
+:if ([:typeof $CommandRateLimitTracker] != "array") do={ :set CommandRateLimitTracker ({}) }
+
+:global PendingConfirmations;
+:if ([:typeof $PendingConfirmations] != "array") do={ :set PendingConfirmations ({}) }
+
+:global BlockedUsers;
+:if ([:typeof $BlockedUsers] != "array") do={ :set BlockedUsers ({}) }
+
+:global DailySummaryLastSent;
+:if ([:typeof $DailySummaryLastSent] != "str") do={ :set DailySummaryLastSent "" }
+
+# ============================================================================
 # ADVANCED SETTINGS
 # ============================================================================
 
@@ -269,6 +285,9 @@
 :if ($TelegramTokenId != "YOUR_BOT_TOKEN_HERE" && $TelegramChatId != "YOUR_CHAT_ID_HERE") do={
   :log info "MikroTik Telegram Bot is ready! Send /help to your bot to start."
 }
+
+:global BotConfigReady true;
+:log info "MikroTik Telegram Bot configuration loaded"
 
 # ============================================================================
 # NOTES
