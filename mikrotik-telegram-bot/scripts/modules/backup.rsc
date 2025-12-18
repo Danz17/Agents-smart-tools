@@ -144,8 +144,13 @@
   }
 
   # Create export if enabled
+  # NOTE: Export files (.rsc) are plaintext and cannot be encrypted
+  # If encryption is required, only use binary backups (.backup files)
   :local ExportFile "";
   :if ($BackupIncludeExport = true && $BackupSuccess = true) do={
+    :if ([:len $BackupPassword] > 0) do={
+      :log warning ($ScriptName . " - Export file will be plaintext (encryption not supported for .rsc files)");
+    }
     :set ExportFile ($BackupName . ".rsc");
     :onerror ExportErr {
       /export file=$BackupName;
