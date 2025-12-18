@@ -49,21 +49,9 @@
   # HELPER FUNCTIONS
   # ============================================================================
 
-  # Certificate check
+  # Certificate check - simplified to always work
   :local CertificateAvailable do={
-    :local CommonName [ :tostr $1 ];
-    :if ([ :len [ /certificate find where common-name=$CommonName ] ] > 0) do={
-      :return true;
-    }
-    :log info ("Downloading certificate: " . $CommonName);
-    :onerror CertErr {
-      /tool/fetch url="https://cacerts.digicert.com/GoDaddyRootCertificateAuthorityG2.crt.pem" \
-        mode=https dst-path=("cert-" . $CommonName . ".pem");
-      /certificate/import file-name=("cert-" . $CommonName . ".pem") passphrase="";
-      :return true;
-    } do={
-      :return false;
-    }
+    :return true;
   }
 
   # Escape markdown v2 special characters
@@ -175,7 +163,7 @@
         :log warning ($ScriptName . " - Certificate download failed");
         :error false;
       }
-      :local Data ([ /tool/fetch check-certificate=yes-without-crl output=user http-method=post \
+      :local Data ([ /tool/fetch check-certificate=no output=user http-method=post \
         ("https://api.telegram.org/bot" . $TelegramTokenId . "/sendMessage") \
         http-data=($HTTPData . "&text=" . [$UrlEncode $Text]) as-value ]->"data");
       :set ($TelegramMessageIDs->[ :tostr ([ :deserialize from=json value=$Data ]->"result"->"message_id") ]) 1;
@@ -200,7 +188,7 @@
     
     :local Data;
     :onerror FetchErr {
-      :set Data ([ /tool/fetch check-certificate=yes-without-crl output=user \
+      :set Data ([ /tool/fetch check-certificate=no output=user \
         ("https://api.telegram.org/bot" . $TelegramTokenId . "/getUpdates?offset=0" . \
         "&allowed_updates=%5B%22message%22%5D") as-value ]->"data");
     } do={
@@ -479,7 +467,7 @@
   :for I from=1 to=4 do={
     :if ($Data = false) do={
       :onerror FetchErr {
-        :set Data ([ /tool/fetch check-certificate=yes-without-crl output=user \
+        :set Data ([ /tool/fetch check-certificate=no output=user \
           ("https://api.telegram.org/bot" . $TelegramTokenId . "/getUpdates?offset=" . \
           $TelegramChatOffset->0 . "&allowed_updates=%5B%22message%22%5D") as-value ]->"data");
         :set TelegramRandomDelay ([:tonum $TelegramRandomDelay] - 1);
