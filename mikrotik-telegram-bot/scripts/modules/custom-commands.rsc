@@ -199,8 +199,25 @@
     :local LogMsg ("📋 *Recent Logs*\n\n");
     :local LogCount 0;
     
+    # Sanitize filter to prevent regex DoS - limit length and escape special chars
     :if ([:len $Filter] = 0) do={
       :set Filter ".*";
+    } else={
+      # Limit filter length to prevent DoS
+      :if ([:len $Filter] > 50) do={
+        :set Filter [:pick $Filter 0 50];
+      }
+      # Escape common regex special characters for safety
+      :local SafeFilter "";
+      :for I from=0 to=([:len $Filter] - 1) do={
+        :local Char [:pick $Filter $I ($I + 1)];
+        :if ($Char ~ "[A-Za-z0-9 ]") do={
+          :set SafeFilter ($SafeFilter . $Char);
+        } else={
+          :set SafeFilter ($SafeFilter . "\\" . $Char);
+        }
+      }
+      :set Filter $SafeFilter;
     }
     
     :foreach LogEntry in=[/log find where message~$Filter] do={

@@ -17,6 +17,7 @@
   :global Identity;
   :global TelegramTokenId;
   :global TelegramChatId;
+  :global TelegramThreadId;
   :global SendDailySummary;
   :global DailySummaryTime;
   :global DailySummaryLastSent;
@@ -76,13 +77,21 @@
     :local Notification $1;
     :global TelegramTokenId;
     :global TelegramChatId;
+    :global TelegramThreadId;
     :global Identity;
+    
+    :local ChatId ([$1 "chatid"]);
+    :if ([:len $ChatId] = 0) do={ :set ChatId $TelegramChatId; }
+    
+    :local ThreadId ([$1 "threadid"]);
+    :if ([:len $ThreadId] = 0) do={ :set ThreadId $TelegramThreadId; }
     
     :local Text ("*[" . $Identity . "] " . ($Notification->"subject") . "*\n\n" . \
       ($Notification->"message"));
     
-    :local HTTPData ("chat_id=" . $TelegramChatId . \
+    :local HTTPData ("chat_id=" . $ChatId . \
       "&disable_notification=" . ($Notification->"silent") . \
+      "&message_thread_id=" . $ThreadId . \
       "&parse_mode=Markdown");
     
     :onerror SendErr {
