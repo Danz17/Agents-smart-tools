@@ -231,6 +231,7 @@
 :global CheckHealthCPUUtilizationNotified false
 :global CheckHealthRAMUtilizationNotified false
 :global CheckHealthDiskUtilizationNotified false
+:global CheckHealthInternetConnectivity true
 
 # RouterOS update notification tracking
 :global SentRouterosUpdateNotification ""

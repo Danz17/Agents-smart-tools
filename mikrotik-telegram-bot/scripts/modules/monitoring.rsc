@@ -27,7 +27,9 @@
   :global CheckHealthCPUUtilizationNotified;
   :global CheckHealthRAMUtilizationNotified;
   :global CheckHealthDiskUtilizationNotified;
+  :global CheckHealthInternetConnectivity;
   :global TelegramChatId;
+  :global TelegramThreadId;
 
   # Check if monitoring is enabled
   :if ($EnableAutoMonitoring != true) do={
@@ -64,13 +66,21 @@
     :local Notification $1;
     :global TelegramTokenId;
     :global TelegramChatId;
+    :global TelegramThreadId;
     :global Identity;
+    
+    :local ChatId ([$1 "chatid"]);
+    :if ([:len $ChatId] = 0) do={ :set ChatId $TelegramChatId; }
+    
+    :local ThreadId ([$1 "threadid"]);
+    :if ([:len $ThreadId] = 0) do={ :set ThreadId $TelegramThreadId; }
     
     :local Text ("*[" . $Identity . "] " . ($Notification->"subject") . "*\n\n" . \
       ($Notification->"message"));
     
-    :local HTTPData ("chat_id=" . $TelegramChatId . \
+    :local HTTPData ("chat_id=" . $ChatId . \
       "&disable_notification=" . ($Notification->"silent") . \
+      "&message_thread_id=" . $ThreadId . \
       "&parse_mode=Markdown");
     
     :onerror SendErr {
@@ -282,6 +292,38 @@
         :log debug ($ScriptName . " - Interface not found: " . $IntName);
       }
     }
+  }
+
+  # ============================================================================
+  # INTERNET CONNECTIVITY MONITORING
+  # ============================================================================
+  
+  :local InternetUp false;
+  :onerror PingErr {
+    :local PingResult [/ping 8.8.8.8 count=2 timeout=3s];
+    :if ([:len $PingResult] > 0) do={
+      :set InternetUp true;
+    }
+  } do={
+    :set InternetUp false;
+  }
+  
+  :if ($InternetUp = false && $CheckHealthInternetConnectivity = true) do={
+    $SendTelegram2 ({ origin=$ScriptName; silent=false; \
+      subject="🌐 Internet Connectivity Lost"; \
+      message=("Router " . $Identity . " cannot reach the internet.\n\n" . \
+        "Ping to 8.8.8.8 failed.\n" . \
+        "Check WAN interface and routing.") });
+    :set CheckHealthInternetConnectivity false;
+    :log warning ($ScriptName . " - Internet connectivity lost");
+  }
+  
+  :if ($InternetUp = true && $CheckHealthInternetConnectivity = false) do={
+    $SendTelegram2 ({ origin=$ScriptName; silent=true; \
+      subject="✅ Internet Connectivity Restored"; \
+      message=("Router " . $Identity . " internet connectivity has been restored.") });
+    :set CheckHealthInternetConnectivity true;
+    :log info ($ScriptName . " - Internet connectivity restored");
   }
 
   # ============================================================================

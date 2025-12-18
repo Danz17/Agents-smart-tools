@@ -767,8 +767,16 @@
               subject="⚙️ Command Result"; \
               message=("⚙️ Command:\n" . $Command . "\n\n" . $State . $OutputText) });
             
-            # Cleanup
-            /file remove [find name~("^" . $TmpFile)];
+            # Cleanup - use exact name matches to avoid regex injection
+            :if ([:len [/file find name=$TmpFile]] > 0) do={
+              /file remove $TmpFile;
+            }
+            :if ([:len [/file find name=($TmpFile . ".done")]] > 0) do={
+              /file remove ($TmpFile . ".done");
+            }
+            :if ([:len [/file find name=($TmpFile . ".failed")]] > 0) do={
+              /file remove ($TmpFile . ".failed");
+            }
           } else={
             :log info ($ScriptName . " - Command from update " . $UpdateID . " failed syntax validation");
             $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=false; \

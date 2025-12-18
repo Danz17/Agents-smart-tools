@@ -17,6 +17,7 @@
   :global Identity;
   :global TelegramTokenId;
   :global TelegramChatId;
+  :global TelegramThreadId;
   :global EnableAutoBackup;
   :global BackupRetention;
   :global BackupPassword;
@@ -62,13 +63,21 @@
     :local Notification $1;
     :global TelegramTokenId;
     :global TelegramChatId;
+    :global TelegramThreadId;
     :global Identity;
+    
+    :local ChatId ([$1 "chatid"]);
+    :if ([:len $ChatId] = 0) do={ :set ChatId $TelegramChatId; }
+    
+    :local ThreadId ([$1 "threadid"]);
+    :if ([:len $ThreadId] = 0) do={ :set ThreadId $TelegramThreadId; }
     
     :local Text ("*[" . $Identity . "] " . ($Notification->"subject") . "*\n\n" . \
       ($Notification->"message"));
     
-    :local HTTPData ("chat_id=" . $TelegramChatId . \
+    :local HTTPData ("chat_id=" . $ChatId . \
       "&disable_notification=" . ($Notification->"silent") . \
+      "&message_thread_id=" . $ThreadId . \
       "&parse_mode=Markdown");
     
     :onerror SendErr {
@@ -95,6 +104,19 @@
   }
 
   :log info ($ScriptName . " - Starting backup process");
+
+  # Check disk space before backup (need at least 10MB free)
+  :local FreeSpace [/system resource get free-hdd-space];
+  :if ($FreeSpace < 10000000) do={
+    :log error ($ScriptName . " - Insufficient disk space: " . $FreeSpace . " bytes free");
+    $SendTelegram2 ({ origin=$ScriptName; silent=false; \
+      subject="❌ Backup Failed"; \
+      message=("Insufficient disk space for backup\n\n" . \
+        "Free space: " . [$FormatBytes $FreeSpace] . "\n" . \
+        "Required: 10MB minimum") });
+    :set ExitOK true;
+    :error false;
+  }
 
   # Create backup filename
   :local DateStr [/system clock get date];
@@ -134,20 +156,49 @@
     }
   }
 
-  # Cleanup old backups
+  # Cleanup old backups (sorted by creation-time, oldest first)
   :local BackupFiles [/file find where name~("^" . $Identity . ".*\\.backup\$")];
   :local BackupCount [:len $BackupFiles];
   :local DeletedCount 0;
   
   :if ($BackupCount > $BackupRetention) do={
     :local ToDelete ($BackupCount - $BackupRetention);
+    # Build array of files with creation times
+    :local FileTimes ({});
     :foreach File in=$BackupFiles do={
-      :if ($DeletedCount < $ToDelete) do={
-        :local FileName [/file get $File name];
-        /file remove $File;
-        :set DeletedCount ($DeletedCount + 1);
-        :log info ($ScriptName . " - Deleted old backup: " . $FileName);
+      :local FileCreationTime [/file get $File creation-time];
+      :set ($FileTimes->[:len $FileTimes]) {file=$File; time=$FileCreationTime};
+    }
+    # Find and delete oldest files (simple selection sort)
+    :while ($DeletedCount < $ToDelete && [:len $FileTimes] > 0) do={
+      :local OldestIndex 0;
+      :local OldestTime ($FileTimes->0->"time");
+      :local I 0;
+      :foreach Entry in=$FileTimes do={
+        :local EntryTime ($Entry->"time");
+        :if ($EntryTime < $OldestTime) do={
+          :set OldestTime $EntryTime;
+          :set OldestIndex $I;
+        }
+        :set I ($I + 1);
       }
+      # Delete the oldest file
+      :local OldestEntry ($FileTimes->$OldestIndex);
+      :local File ($OldestEntry->"file");
+      :local FileName [/file get $File name];
+      /file remove $File;
+      :set DeletedCount ($DeletedCount + 1);
+      :log info ($ScriptName . " - Deleted old backup: " . $FileName);
+      # Remove from array
+      :local NewFileTimes ({});
+      :local J 0;
+      :foreach Entry in=$FileTimes do={
+        :if ($J != $OldestIndex) do={
+          :set ($NewFileTimes->[:len $NewFileTimes]) $Entry;
+        }
+        :set J ($J + 1);
+      }
+      :set FileTimes $NewFileTimes;
     }
   }
 
