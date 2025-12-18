@@ -59,18 +59,34 @@
 
 :put "[Step 2/8] Installing SSL certificate..."
 
-:if ([:len [/certificate find where common-name~"Go Daddy"]] > 0) do={
+:if ([:len [/certificate find where common-name~"Go Daddy"]] > 0 || \
+     [:len [/certificate find where common-name~"DigiCert"]] > 0 || \
+     [:len [/certificate find where common-name~"ISRG"]] > 0) do={
   :put "  ✓ Certificate already installed"
 } else={
-  :onerror CertErr {
-    /tool fetch url="https://cacerts.digicert.com/GoDaddyRootCertificateAuthorityG2.crt.pem" \
-      mode=https dst-path=godaddy.pem
+  :local CertInstalled false
+  # Try multiple certificate sources
+  :onerror CertErr1 {
+    /tool fetch url="https://letsencrypt.org/certs/isrgrootx1.pem" \
+      mode=https dst-path=telegram-cert.pem
     :delay 2s
-    /certificate import file-name=godaddy.pem passphrase=""
-    :put "  ✓ Certificate installed successfully"
+    /certificate import file-name=telegram-cert.pem passphrase=""
+    :set CertInstalled true
+    :put "  ✓ Certificate installed (ISRG Root X1)"
   } do={
-    :put ("  ✗ Certificate installation failed: " . $CertErr)
-    :set DeploymentFailed true
+    :onerror CertErr2 {
+      /tool fetch url="https://curl.se/ca/cacert.pem" \
+        mode=https dst-path=telegram-cert.pem
+      :delay 2s
+      /certificate import file-name=telegram-cert.pem passphrase=""
+      :set CertInstalled true
+      :put "  ✓ Certificate installed (CA Bundle)"
+    } do={
+      :put "  ⚠ Certificate auto-install failed, trying without verification..."
+    }
+  }
+  :if ($CertInstalled = false) do={
+    :put "  ⚠ Will use check-certificate=no for API calls"
   }
 }
 
@@ -99,21 +115,22 @@
   
   # Support both directory uploads (e.g. "modules/monitoring.rsc") and flat uploads
   # (e.g. "monitoring.rsc" in the root file store).
-  :local FileCandidates ({ $FileName })
-  :if ($Script ~ "^modules/") do={
-    :local BaseName [:pick $Script 8 [:len $Script]]
-    :set FileCandidates ($FileCandidates, ($BaseName . ".rsc"))
-  }
-
   :local FoundFile ""
-  :foreach Cand in=$FileCandidates do={
-    :if ([:len [/file find where name=$Cand]] > 0) do={
-      :set FoundFile $Cand
-      :break
+  
+  # Try the exact filename first
+  :if ([:len [/file find where name=$FileName]] > 0) do={
+    :set FoundFile $FileName
+  } else={
+    # For modules, try the base name without the directory prefix
+    :if ($Script ~ "^modules/") do={
+      :local BaseName ([:pick $Script 8 [:len $Script]] . ".rsc")
+      :if ([:len [/file find where name=$BaseName]] > 0) do={
+        :set FoundFile $BaseName
+      }
     }
   }
 
-  :if ($FoundFile != "") do={
+  :if ([:len $FoundFile] > 0) do={
     :onerror ScriptErr {
       :local Existing [/system script find where name=$Script]
       :if ([:len $Existing] > 0) do={
