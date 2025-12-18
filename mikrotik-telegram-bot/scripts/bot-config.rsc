@@ -230,21 +230,10 @@
 :global CheckHealthCPUUtilization 0
 :global CheckHealthCPUUtilizationNotified false
 :global CheckHealthRAMUtilizationNotified false
+:global CheckHealthDiskUtilizationNotified false
 
 # RouterOS update notification tracking
 :global SentRouterosUpdateNotification ""
-
-# Rate limiting tracker (runtime)
-:global CommandRateLimitTracker ({})
-
-# Pending confirmations for dangerous commands (runtime)
-:global PendingConfirmations ({})
-
-# Blocked users tracker (runtime)
-:global BlockedUsers ({})
-
-# Daily summary last sent date
-:global DailySummaryLastSent ""
 
 # ============================================================================
 # CUSTOM COMMAND ALIASES
@@ -285,9 +274,6 @@
 :if ($TelegramTokenId != "YOUR_BOT_TOKEN_HERE" && $TelegramChatId != "YOUR_CHAT_ID_HERE") do={
   :log info "MikroTik Telegram Bot is ready! Send /help to your bot to start."
 }
-
-:global BotConfigReady true;
-:log info "MikroTik Telegram Bot configuration loaded"
 
 # ============================================================================
 # NOTES

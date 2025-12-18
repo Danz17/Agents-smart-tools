@@ -49,9 +49,13 @@
   # HELPER FUNCTIONS
   # ============================================================================
 
-  # Certificate check - simplified to always work
+  # Certificate check - verify ISRG Root X1 is installed
   :local CertificateAvailable do={
-    :return true;
+    :local CommonName [ :tostr $1 ];
+    :if ([ :len [ /certificate find where common-name=$CommonName ] ] > 0) do={
+      :return true;
+    }
+    :return false;
   }
 
   # Escape markdown v2 special characters
@@ -63,6 +67,9 @@
       :local String [ :tostr $1 ];
       :local Find [ :tostr $2 ];
       :local Replace [ :tostr $3 ];
+      :if ([:len $Find] = 0) do={
+        :return $String;
+      }
       :local Result "";
       :local Pos 0;
       
@@ -117,6 +124,29 @@
     :return $Result;
   }
 
+  # Dangerous commands that should be blocked
+  :local DangerousCommands ({
+    "/system reset-configuration";
+    "/system reset-configuration no-defaults=yes";
+    "/system reset-configuration keep-users=yes";
+    "/system reset-configuration skip-backup=yes";
+    "/file remove *";
+    "/file remove all";
+  });
+  
+  # Check if command is dangerous and should be blocked
+  :local IsDangerousCommand do={
+    :local Command [ :tostr $1 ];
+    :local CommandUpper [:toupper $Command];
+    :foreach DangerousCmd in=$DangerousCommands do={
+      :local DangerousUpper [:toupper $DangerousCmd];
+      :if ($CommandUpper ~ ("^" . $DangerousUpper)) do={
+        :return true;
+      }
+    }
+    :return false;
+  }
+
   # Validate syntax - returns true if valid, false if invalid
   :local ValidateSyntax do={
     :local Code [ :tostr $1 ];
@@ -163,14 +193,18 @@
       "&message_thread_id=" . $ThreadId . "&disable_web_page_preview=true");
     
     :onerror SendErr {
-      :if ([$CertificateAvailable "Go Daddy Root Certificate Authority - G2"] = false) do={
-        :log warning ($ScriptName . " - Certificate download failed");
-        :error false;
+      :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
+        :log warning ($ScriptName . " - Certificate not found, using check-certificate=no");
+        :local Data ([ /tool/fetch check-certificate=no output=user http-method=post \
+          ("https://api.telegram.org/bot" . $TelegramTokenId . "/sendMessage") \
+          http-data=($HTTPData . "&text=" . [$UrlEncode $Text]) as-value ]->"data");
+        :set ($TelegramMessageIDs->[ :tostr ([ :deserialize from=json value=$Data ]->"result"->"message_id") ]) 1;
+      } else={
+        :local Data ([ /tool/fetch check-certificate=yes-without-crl output=user http-method=post \
+          ("https://api.telegram.org/bot" . $TelegramTokenId . "/sendMessage") \
+          http-data=($HTTPData . "&text=" . [$UrlEncode $Text]) as-value ]->"data");
+        :set ($TelegramMessageIDs->[ :tostr ([ :deserialize from=json value=$Data ]->"result"->"message_id") ]) 1;
       }
-      :local Data ([ /tool/fetch check-certificate=no output=user http-method=post \
-        ("https://api.telegram.org/bot" . $TelegramTokenId . "/sendMessage") \
-        http-data=($HTTPData . "&text=" . [$UrlEncode $Text]) as-value ]->"data");
-      :set ($TelegramMessageIDs->[ :tostr ([ :deserialize from=json value=$Data ]->"result"->"message_id") ]) 1;
     } do={
       :log info ($ScriptName . " - Message queued: " . $SendErr);
       :if ([:typeof $TelegramQueue] = "nothing") do={
@@ -185,16 +219,21 @@
   :local GetTelegramChatId do={
     :global TelegramTokenId;
     
-    :if ([$CertificateAvailable "Go Daddy Root Certificate Authority - G2"] = false) do={
-      :log warning "Certificate download failed";
-      :return false;
+    :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
+      :log warning "Certificate ISRG Root X1 not found, using check-certificate=no";
     }
     
     :local Data;
     :onerror FetchErr {
-      :set Data ([ /tool/fetch check-certificate=no output=user \
-        ("https://api.telegram.org/bot" . $TelegramTokenId . "/getUpdates?offset=0" . \
-        "&allowed_updates=%5B%22message%22%5D") as-value ]->"data");
+      :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
+        :set Data ([ /tool/fetch check-certificate=no output=user \
+          ("https://api.telegram.org/bot" . $TelegramTokenId . "/getUpdates?offset=0" . \
+          "&allowed_updates=%5B%22message%22%5D") as-value ]->"data");
+      } else={
+        :set Data ([ /tool/fetch check-certificate=yes-without-crl output=user \
+          ("https://api.telegram.org/bot" . $TelegramTokenId . "/getUpdates?offset=0" . \
+          "&allowed_updates=%5B%22message%22%5D") as-value ]->"data");
+      }
     } do={
       :log warning ("Fetching data failed: " . $FetchErr);
       :return false;
@@ -224,7 +263,7 @@
     :if ([:pick $Command 0 1] = "/") do={
       :local CmdName [:pick $Command 1 [:len $Command]];
       :local CmdParts [:toarray $CmdName];
-      :local BaseCmd [:pick $CmdParts 0];
+      :local BaseCmd [:tolower [:pick $CmdParts 0]];
       
       :if ([:typeof ($CustomCommands->$BaseCmd)] != "nothing") do={
         :return ($CustomCommands->$BaseCmd);
@@ -454,10 +493,8 @@
     :set TelegramRandomDelay 0;
   }
 
-  :if ([$CertificateAvailable "Go Daddy Root Certificate Authority - G2"] = false) do={
-    :log warning ($ScriptName . " - Certificate download failed");
-    :set ExitOK true;
-    :error false;
+  :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
+    :log warning ($ScriptName . " - Certificate ISRG Root X1 not found, continuing with check-certificate=no");
   }
 
   # Random delay to prevent simultaneous polling
@@ -471,9 +508,15 @@
   :for I from=1 to=4 do={
     :if ($Data = false) do={
       :onerror FetchErr {
-        :set Data ([ /tool/fetch check-certificate=no output=user \
-          ("https://api.telegram.org/bot" . $TelegramTokenId . "/getUpdates?offset=" . \
-          $TelegramChatOffset->0 . "&allowed_updates=%5B%22message%22%5D") as-value ]->"data");
+        :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
+          :set Data ([ /tool/fetch check-certificate=no output=user \
+            ("https://api.telegram.org/bot" . $TelegramTokenId . "/getUpdates?offset=" . \
+            $TelegramChatOffset->0 . "&allowed_updates=%5B%22message%22%5D") as-value ]->"data");
+        } else={
+          :set Data ([ /tool/fetch check-certificate=yes-without-crl output=user \
+            ("https://api.telegram.org/bot" . $TelegramTokenId . "/getUpdates?offset=" . \
+            $TelegramChatOffset->0 . "&allowed_updates=%5B%22message%22%5D") as-value ]->"data");
+        }
         :set TelegramRandomDelay ([:tonum $TelegramRandomDelay] - 1);
         :if ($TelegramRandomDelay < 0) do={ :set TelegramRandomDelay 0; }
       } do={
@@ -523,8 +566,11 @@
         :set Trusted true;
       }
       :if ($Trusted = false && [:len $TelegramChatIdsTrusted] > 0) do={
-        :if ($FromId = $TelegramChatIdsTrusted || $ChatIdStr = $TelegramChatIdsTrusted) do={
-          :set Trusted true;
+        :foreach TrustedId in=$TelegramChatIdsTrusted do={
+          :local TrustedIdStr [:tostr $TrustedId];
+          :if ($FromId = $TrustedIdStr || $ChatIdStr = $TrustedIdStr) do={
+            :set Trusted true;
+          }
         }
       }
 
@@ -599,16 +645,17 @@
           :set Done true;
         }
         
-        # Handle confirmation code (e.g., "CONFIRM ABC123")
-        :if ($Done = false && $Command ~ "^CONFIRM [A-Z0-9]+\$") do={
-          :local ConfirmCode [:pick $Command 8 [:len $Command]];
+        # Handle confirmation code (e.g., "CONFIRM ABC123" or "confirm abc123")
+        :local CommandUpper [:toupper $Command];
+        :if ($Done = false && $CommandUpper ~ "^CONFIRM [A-Z0-9]+\$") do={
+          :local ConfirmCode [:pick $CommandUpper 8 [:len $CommandUpper]];
           :local ConfirmedCmd [$CheckConfirmation ($From->"id") $ConfirmCode];
           
           :if ([:len $ConfirmedCmd] > 0) do={
             :log info ($ScriptName . " - User " . ($From->"id") . " confirmed command: " . $ConfirmedCmd);
             # Set Command to the confirmed command and let it fall through to execution
+            # Don't auto-activate - require explicit activation
             :set Command $ConfirmedCmd;
-            :set TelegramChatActive true;
           } else={
             $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=false; \
               replyto=($Message->"message_id"); threadid=$ThreadId; \
@@ -635,8 +682,18 @@
           # Process custom command aliases
           :set Command [$ProcessCustomCommand $Command];
           
+          # Check dangerous commands blocklist
+          :if ([$IsDangerousCommand $Command] = true) do={
+            $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=false; \
+              replyto=($Message->"message_id"); threadid=$ThreadId; \
+              subject="🚫 Command Blocked"; \
+              message=("This command is permanently blocked for security reasons.\n\nCommand: " . $Command) });
+            :log warning ($ScriptName . " - User " . ($From->"id") . " tried blocked command: " . $Command);
+            :set Done true;
+          }
+          
           # Check whitelist
-          :if ([$CheckWhitelist $Command] = false) do={
+          :if ($Done = false && [$CheckWhitelist $Command] = false) do={
             $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=false; \
               replyto=($Message->"message_id"); threadid=$ThreadId; \
               subject="🚫 Command Not Allowed"; \

@@ -26,6 +26,7 @@
   :global CheckHealthCPUUtilization;
   :global CheckHealthCPUUtilizationNotified;
   :global CheckHealthRAMUtilizationNotified;
+  :global CheckHealthDiskUtilizationNotified;
   :global TelegramChatId;
 
   # Check if monitoring is enabled
@@ -174,7 +175,7 @@
   :local UsedHDD ($TotalHDD - $FreeHDD);
   :local HDDPercent ($UsedHDD * 100 / $TotalHDD);
   
-  :if ($HDDPercent >= $MonitorDiskThreshold) do={
+  :if ($HDDPercent >= $MonitorDiskThreshold && $CheckHealthDiskUtilizationNotified = false) do={
     $SendTelegram2 ({ origin=$ScriptName; silent=false; \
       subject="⚠️ Disk Usage Alert"; \
       message=("Disk usage on " . $Identity . " is high!\n\n" . \
@@ -182,7 +183,17 @@
         "Total: " . [$HumanReadableNum $TotalHDD 1024] . "B\n" . \
         "Used: " . [$HumanReadableNum $UsedHDD 1024] . "B\n" . \
         "Free: " . [$HumanReadableNum $FreeHDD 1024] . "B") });
+    :set CheckHealthDiskUtilizationNotified true;
     :log warning ($ScriptName . " - Disk usage high: " . $HDDPercent . "%");
+  }
+  
+  :if ($HDDPercent < ($MonitorDiskThreshold - 10) && $CheckHealthDiskUtilizationNotified = true) do={
+    $SendTelegram2 ({ origin=$ScriptName; silent=true; \
+      subject="✅ Disk Usage Recovered"; \
+      message=("Disk usage on " . $Identity . " returned to normal.\n\n" . \
+        "Used: " . $HDDPercent . "%") });
+    :set CheckHealthDiskUtilizationNotified false;
+    :log info ($ScriptName . " - Disk usage normal: " . $HDDPercent . "%");
   }
 
   # ============================================================================
@@ -226,7 +237,23 @@
   # ============================================================================
   
   :if ([:len $MonitorInterfaces] > 0) do={
-    :local InterfaceList [:toarray $MonitorInterfaces];
+    # Parse comma-separated interface list
+    :local InterfaceList ({});
+    :local CurrentInterface "";
+    :for I from=0 to=([:len $MonitorInterfaces] - 1) do={
+      :local Char [:pick $MonitorInterfaces $I ($I + 1)];
+      :if ($Char = ",") do={
+        :if ([:len $CurrentInterface] > 0) do={
+          :set ($InterfaceList->[:len $InterfaceList]) $CurrentInterface;
+          :set CurrentInterface "";
+        }
+      } else={
+        :set CurrentInterface ($CurrentInterface . $Char);
+      }
+    }
+    :if ([:len $CurrentInterface] > 0) do={
+      :set ($InterfaceList->[:len $InterfaceList]) $CurrentInterface;
+    }
     :foreach IntName in=$InterfaceList do={
       :onerror IntErr {
         :local Int [ /interface/get [find name=$IntName] ];
