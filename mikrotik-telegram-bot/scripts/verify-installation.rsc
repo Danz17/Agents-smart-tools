@@ -23,9 +23,9 @@
 :local VersionNum [:pick $ROSVersion 0 [:find $ROSVersion "."]]
 
 :if ([:tonum $VersionNum] >= 7) do={
-  :put "        ✓ RouterOS version OK: $ROSVersion"
+  :put ("        ✓ RouterOS version OK: " . $ROSVersion)
 } else={
-  :put "        ✗ RouterOS version too old: $ROSVersion (need 7.15+)"
+  :put ("        ✗ RouterOS version too old: " . $ROSVersion . " (need 7.15+)")
   :set AllOK false
 }
 
@@ -66,20 +66,20 @@
 # ============================================================================
 
 :put "[ 3/10] Checking installed scripts..."
-:local RequiredScripts ({"bot-core"; "modules/monitoring"; "modules/backup"; "modules/custom-commands"})
+:local RequiredScripts ({"bot-core"; "modules/monitoring"; "modules/backup"; "modules/custom-commands"; "modules/wireless-monitoring"; "modules/daily-summary"})
 :local ScriptsOK 0
 
 :foreach Script in=$RequiredScripts do={
   :if ([:len [/system script find where name=$Script]] > 0) do={
     :set ScriptsOK ($ScriptsOK + 1)
   } else={
-    :put "        ✗ Missing script: $Script"
+    :put ("        ✗ Missing script: " . $Script)
     :set AllOK false
   }
 }
 
 :if ($ScriptsOK = [:len $RequiredScripts]) do={
-  :put "        ✓ All scripts installed ($ScriptsOK/[:len $RequiredScripts])"
+  :put ("        ✓ All scripts installed (" . $ScriptsOK . "/" . [:len $RequiredScripts] . ")")
 }
 
 # ============================================================================
@@ -87,21 +87,21 @@
 # ============================================================================
 
 :put "[ 4/10] Checking schedulers..."
-:local RequiredSchedulers ({"telegram-bot"; "system-monitoring"; "auto-backup"})
+:local RequiredSchedulers ({"telegram-bot"; "system-monitoring"; "auto-backup"; "daily-summary"})
 :local SchedulersOK 0
 
 :foreach Scheduler in=$RequiredSchedulers do={
   :if ([:len [/system scheduler find where name=$Scheduler]] > 0) do={
     :set SchedulersOK ($SchedulersOK + 1)
   } else={
-    :put "        ⚠ Missing scheduler: $Scheduler"
+    :put ("        ⚠ Missing scheduler: " . $Scheduler)
   }
 }
 
 :if ($SchedulersOK = [:len $RequiredSchedulers]) do={
-  :put "        ✓ All schedulers configured ($SchedulersOK/[:len $RequiredSchedulers])"
+  :put ("        ✓ All schedulers configured (" . $SchedulersOK . "/" . [:len $RequiredSchedulers] . ")")
 } else={
-  :put "        ⚠ Some schedulers missing ($SchedulersOK/[:len $RequiredSchedulers]) - bot may not run automatically"
+  :put ("        ⚠ Some schedulers missing (" . $SchedulersOK . "/" . [:len $RequiredSchedulers] . ") - bot may not run automatically")
 }
 
 # ============================================================================
@@ -130,7 +130,7 @@
     :set AllOK false
   }
 } do={
-  :put "        ✗ Internet connectivity test failed: $ConnErr"
+  :put ("        ✗ Internet connectivity test failed: " . $ConnErr)
   :set AllOK false
 }
 
@@ -152,7 +152,7 @@
       :set AllOK false
     }
   } do={
-    :put "        ✗ Token validation failed: $TokenErr"
+    :put ("        ✗ Token validation failed: " . $TokenErr)
     :set AllOK false
   }
 } else={
@@ -200,7 +200,7 @@
     :if ($ScriptPolicy ~ $RequiredPolicies) do={
       # Policy OK
     } else={
-      :put ("        ⚠ Script $Script may have insufficient policies")
+      :put ("        ⚠ Script " . $Script . " may have insufficient policies")
       :set PolicyOK false
     }
   }

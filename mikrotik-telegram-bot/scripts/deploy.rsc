@@ -84,7 +84,9 @@
   "bot-core";
   "modules/monitoring";
   "modules/backup";
-  "modules/custom-commands"
+  "modules/custom-commands";
+  "modules/wireless-monitoring";
+  "modules/daily-summary"
 })
 
 :local ScriptsCreated 0
@@ -207,6 +209,20 @@
   }
 } else={
   :put "  ⚠ auto-backup scheduler already exists"
+}
+
+# Daily summary scheduler
+:if ([:len [/system scheduler find where name="daily-summary"]] = 0) do={
+  :onerror SchedErr {
+    /system scheduler add name="daily-summary" interval=5m start-time=startup \
+      policy=ftp,read,write,policy,test,password,sniff,sensitive,romon \
+      on-event="/system script run modules/daily-summary"
+    :put "  ✓ Created daily-summary scheduler"
+  } do={
+    :put ("  ✗ Failed to create daily-summary scheduler: " . $SchedErr)
+  }
+} else={
+  :put "  ⚠ daily-summary scheduler already exists"
 }
 
 # ============================================================================

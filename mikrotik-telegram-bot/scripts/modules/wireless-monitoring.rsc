@@ -32,6 +32,29 @@
     :error false;
   }
 
+  # URL encode helper
+  :local UrlEncode do={
+    :local String [ :tostr $1 ];
+    :local Result "";
+    :for I from=0 to=([:len $String] - 1) do={
+      :local Char [:pick $String $I ($I + 1)];
+      :if ($Char ~ "[A-Za-z0-9_.~-]") do={
+        :set Result ($Result . $Char);
+      } else={
+        :if ($Char = " ") do={
+          :set Result ($Result . "%20");
+        } else={
+          :if ($Char = "\n") do={
+            :set Result ($Result . "%0A");
+          } else={
+            :set Result ($Result . $Char);
+          }
+        }
+      }
+    }
+    :return $Result;
+  }
+
   # Send notification function
   :local SendTelegram2 do={
     :local Notification $1;
@@ -49,9 +72,9 @@
     :onerror SendErr {
       /tool/fetch check-certificate=yes-without-crl output=none http-method=post \
         ("https://api.telegram.org/bot" . $TelegramTokenId . "/sendMessage") \
-        http-data=($HTTPData . "&text=" . $Text);
+        http-data=($HTTPData . "&text=" . [$UrlEncode $Text]);
     } do={
-      :log warning ($ScriptName . " - Failed to send notification: " . $SendErr);
+      :log warning ("wireless-monitoring - Failed to send notification: " . $SendErr);
     }
   }
 
@@ -95,7 +118,7 @@
     :local WName [/interface wireless get $WInt name];
     
     # Get registration table (connected clients)
-    :onerror RegErr do={} do={
+    :onerror RegErr {
       :local RegTable [/interface wireless registration-table find where interface=$WName];
       :local ClientCount [:len $RegTable];
       :set TotalClients ($TotalClients + $ClientCount);
@@ -111,7 +134,7 @@
           :set ClientDetails ($ClientDetails . "\n  • " . $MAC . " (" . $Signal . "dBm)");
         }
       }
-    }
+    } do={ }
   }
 
   # Alert on threshold (if configured)
@@ -133,7 +156,7 @@
   :foreach WInt in=$WirelessInterfaces do={
     :local WName [/interface wireless get $WInt name];
     
-    :onerror RegErr do={} do={
+    :onerror RegErr {
       :local RegTable [/interface wireless registration-table find where interface=$WName];
       
       :foreach Client in=$RegTable do={
@@ -152,7 +175,7 @@
           :log info ($ScriptName . " - Weak signal: " . $MAC . " on " . $WName);
         }
       }
-    }
+    } do={ }
   }
 
   # ============================================================================
@@ -185,7 +208,7 @@
         :set WirelessMsg ($WirelessMsg . "   Frequency: " . ($WData->"frequency") . "\n");
         
         # Get connected clients
-        :onerror RegErr do={} do={
+        :onerror RegErr3 {
           :local RegTable [/interface wireless registration-table find where interface=$WName];
           :local ClientCount [:len $RegTable];
           :set TotalClients ($TotalClients + $ClientCount);
@@ -197,7 +220,7 @@
             :set WirelessMsg ($WirelessMsg . "      • " . ($CData->"mac-address"));
             :set WirelessMsg ($WirelessMsg . " (" . ($CData->"signal-strength") . ")\n");
           }
-        }
+        } do={ :set WirelessMsg ($WirelessMsg . "   Clients: 0\n"); }
         :set WirelessMsg ($WirelessMsg . "\n");
       }
     }

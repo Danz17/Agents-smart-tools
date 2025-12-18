@@ -35,6 +35,29 @@
     :error false;
   }
 
+  # URL encode helper
+  :local UrlEncode do={
+    :local String [ :tostr $1 ];
+    :local Result "";
+    :for I from=0 to=([:len $String] - 1) do={
+      :local Char [:pick $String $I ($I + 1)];
+      :if ($Char ~ "[A-Za-z0-9_.~-]") do={
+        :set Result ($Result . $Char);
+      } else={
+        :if ($Char = " ") do={
+          :set Result ($Result . "%20");
+        } else={
+          :if ($Char = "\n") do={
+            :set Result ($Result . "%0A");
+          } else={
+            :set Result ($Result . $Char);
+          }
+        }
+      }
+    }
+    :return $Result;
+  }
+
   # Send notification function
   :local SendTelegram2 do={
     :local Notification $1;
@@ -52,9 +75,9 @@
     :onerror SendErr {
       /tool/fetch check-certificate=yes-without-crl output=none http-method=post \
         ("https://api.telegram.org/bot" . $TelegramTokenId . "/sendMessage") \
-        http-data=($HTTPData . "&text=" . $Text);
+        http-data=($HTTPData . "&text=" . [$UrlEncode $Text]);
     } do={
-      :log warning ($ScriptName . " - Failed to send notification: " . $SendErr);
+      :log warning ("monitoring - Failed to send notification: " . $SendErr);
     }
   }
 
@@ -217,8 +240,8 @@
         }
         
         # Check for errors
-        :local Stats [ /interface/ethernet/get [find name=$IntName] ];
-        :onerror NoStats do={} do={
+        :onerror NoStats {
+          :local Stats [ /interface/ethernet/get [find name=$IntName] ];
           :if (($Stats->"rx-error") > 1000 || ($Stats->"tx-error") > 1000) do={
             $SendTelegram2 ({ origin=$ScriptName; silent=false; \
               subject="⚠️ Interface Errors"; \
@@ -227,7 +250,7 @@
                 "TX Errors: " . ($Stats->"tx-error")) });
             :log warning ($ScriptName . " - Interface errors: " . $IntName);
           }
-        }
+        } do={ :log debug ($ScriptName . " - No ethernet stats for: " . $IntName); }
       } do={
         :log debug ($ScriptName . " - Interface not found: " . $IntName);
       }

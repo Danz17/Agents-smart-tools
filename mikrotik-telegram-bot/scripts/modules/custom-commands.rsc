@@ -24,6 +24,29 @@
   # COMMAND HANDLER FUNCTIONS
   # ============================================================================
 
+  # URL encode helper
+  :local UrlEncode do={
+    :local String [ :tostr $1 ];
+    :local Result "";
+    :for I from=0 to=([:len $String] - 1) do={
+      :local Char [:pick $String $I ($I + 1)];
+      :if ($Char ~ "[A-Za-z0-9_.~-]") do={
+        :set Result ($Result . $Char);
+      } else={
+        :if ($Char = " ") do={
+          :set Result ($Result . "%20");
+        } else={
+          :if ($Char = "\n") do={
+            :set Result ($Result . "%0A");
+          } else={
+            :set Result ($Result . $Char);
+          }
+        }
+      }
+    }
+    :return $Result;
+  }
+
   # Send Telegram message helper
   :local SendTelegram2 do={
     :local Notification $1;
@@ -41,9 +64,9 @@
     :onerror SendErr {
       /tool/fetch check-certificate=yes-without-crl output=none http-method=post \
         ("https://api.telegram.org/bot" . $TelegramTokenId . "/sendMessage") \
-        http-data=($HTTPData . "&text=" . $Text);
+        http-data=($HTTPData . "&text=" . [$UrlEncode $Text]);
     } do={
-      :log warning ($ScriptName . " - Failed to send notification: " . $SendErr);
+      :log warning ("custom-commands - Failed to send notification: " . $SendErr);
     }
   }
 
@@ -110,13 +133,13 @@
         :set IntMsg ($IntMsg . ($IntRunning = true ? "✅" : "❌") . " *" . $IntName . "*\n");
         
         # Get statistics if available
-        :onerror StatsErr do={} do={
+        :onerror StatsErr {
           :local Stats [/interface ethernet get [find name=$IntName]];
           :if ([:typeof $Stats] = "array") do={
-            :set IntMsg ($IntMsg . "   RX: " . ([$Stats "rx-byte"] / 1048576) . "MB");
-            :set IntMsg ($IntMsg . " | TX: " . ([$Stats "tx-byte"] / 1048576) . "MB\n");
+            :set IntMsg ($IntMsg . "   RX: " . (($Stats->"rx-byte") / 1048576) . "MB");
+            :set IntMsg ($IntMsg . " | TX: " . (($Stats->"tx-byte") / 1048576) . "MB\n");
           }
-        }
+        } do={ }
       }
     }
     

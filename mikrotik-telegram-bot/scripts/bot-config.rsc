@@ -23,12 +23,12 @@
 
 # List of trusted user IDs who can control the bot
 # Can be numeric IDs or usernames (with @ prefix)
-:global TelegramChatIdsTrusted ({
-  "YOUR_CHAT_ID_HERE";
-  # Add more trusted users:
-  # 123456789;
-  # "@username";
-})
+:global TelegramChatIdsTrusted (\
+    "YOUR_CHAT_ID_HERE" \
+    # Add more trusted users below: \
+    # "123456789" \
+    # "@username" \
+)
 
 # Thread ID for topic groups (optional)
 # Leave empty for regular groups or private chats
@@ -221,6 +221,18 @@
 
 # RouterOS update notification tracking
 :global SentRouterosUpdateNotification ""
+
+# Rate limiting tracker (runtime)
+:global CommandRateLimitTracker ({})
+
+# Pending confirmations for dangerous commands (runtime)
+:global PendingConfirmations ({})
+
+# Blocked users tracker (runtime)
+:global BlockedUsers ({})
+
+# Daily summary last sent date
+:global DailySummaryLastSent ""
 
 # ============================================================================
 # CUSTOM COMMAND ALIASES
