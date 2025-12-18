@@ -725,8 +725,8 @@
               message=("⚙️ Command:\n" . $Command . "\n\n" . \
                 "❌ The command failed syntax validation!") });
           }
-          } # End of inner Done check (line 664)
-        } # End of outer command execution block
+          }
+        }
       } else={
         # Untrusted user
         :local UsernameText "";
