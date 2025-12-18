@@ -208,14 +208,14 @@
   # ============================================================================
   
   :onerror VoltErr {
-    :local Voltage [ /system/health/get voltage ];
-    :if ($Voltage < $MonitorVoltageMin || $Voltage > $MonitorVoltageMax) do={
+    :local VoltageVal [ /system/health/get value-name=voltage ];
+    :if ([:typeof $VoltageVal] = "num" && ($VoltageVal < $MonitorVoltageMin || $VoltageVal > $MonitorVoltageMax)) do={
       $SendTelegram2 ({ origin=$ScriptName; silent=false; \
         subject="⚡ Voltage Alert"; \
         message=("Voltage on " . $Identity . " is out of range!\n\n" . \
-          "Current: " . $Voltage . "V\n" . \
+          "Current: " . $VoltageVal . "V\n" . \
           "Expected: " . $MonitorVoltageMin . "-" . $MonitorVoltageMax . "V") });
-      :log warning ($ScriptName . " - Voltage out of range: " . $Voltage . "V");
+      :log warning ($ScriptName . " - Voltage out of range: " . $VoltageVal . "V");
     }
   } do={
     :log debug ($ScriptName . " - No voltage sensor available");
