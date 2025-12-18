@@ -12,37 +12,39 @@ A comprehensive Telegram bot for MikroTik RouterOS that provides bidirectional c
 - Multi-device support with group activation
 
 ### 📊 System Monitoring
-- **CPU Utilization**: Automatic alerts when exceeding 75%
-- **RAM Usage**: Warnings at 80% threshold
+- **CPU Utilization**: Automatic alerts when exceeding threshold
+- **RAM Usage**: Warnings at configured threshold
+- **Disk Usage**: Storage monitoring
 - **Interface Statistics**: Traffic monitoring and error detection
 - **Temperature & Voltage**: Hardware health monitoring
-- **Trend Analysis**: 5-point moving average for accurate alerts
+- **Wireless Clients**: WiFi client tracking and signal monitoring
+- **Daily Summary**: Automated daily status reports
 
 ### 💾 Backup Management
 - Scheduled automatic backups
 - On-demand backup via `/backup now` command
-- Direct backup file delivery to Telegram
-- Automatic rotation policy
+- Automatic rotation policy (configurable retention)
 - Configuration export support
+- Telegram notifications on completion
 
 ### 🎯 User-Friendly Commands
 - `/help` - List all available commands
 - `/status` - System overview and health check
-- `/backup [now]` - Backup management
-- `/reboot [confirm]` - Safe reboot with confirmation
-- `/update [check|install]` - RouterOS update management
+- `/backup [now|list]` - Backup management
 - `/interfaces` - Interface status and statistics
 - `/dhcp` - DHCP leases overview
 - `/logs [filter]` - Recent system logs
-- `/traffic [interface]` - Traffic statistics
+- `/wireless` - Wireless client status
+- `/update [check]` - RouterOS update check
 
 ### 🔒 Security Features
-- Trusted user whitelist
-- Input validation and sanitization
-- Rate limiting per user
-- Command audit logging
-- Secure token storage
-- Optional 2FA for critical commands
+- **Trusted User Whitelist**: Only authorized users can control the bot
+- **Rate Limiting**: Configurable commands per minute per user
+- **Command Confirmation**: Dangerous commands require confirmation code
+- **Command Whitelist**: Optional restriction to approved commands only
+- **User Blocking**: Automatic blocking after failed attempts
+- **Audit Logging**: All commands logged to system log
+- **Input Validation**: Syntax validation before execution
 
 ## Quick Start
 
@@ -51,285 +53,204 @@ A comprehensive Telegram bot for MikroTik RouterOS that provides bidirectional c
 - Internet connectivity on the router
 - Telegram account
 
-### Super Quick Install (15 minutes)
-
-Follow our [Quick Start Guide](QUICKSTART.md) for fastest setup!
-
-### Standard Installation
+### Installation (5 Steps)
 
 1. **Create your Telegram bot**
-   - Follow the [Telegram Bot Setup Guide](setup/telegram-setup.md)
-   - Save your bot token and chat ID
+   - Message [@BotFather](https://t.me/BotFather) on Telegram
+   - Send `/newbot` and follow the prompts
+   - Save your bot token
 
-2. **Upload scripts to RouterOS**
+2. **Get your Chat ID**
+   ```routeros
+   :global TelegramTokenId "YOUR_BOT_TOKEN"
+   $GetTelegramChatId
+   ```
+
+3. **Upload scripts to RouterOS**
    - Upload all `.rsc` files from the `scripts/` directory
-   - Import them via Terminal or drag-and-drop in WinBox
 
-3. **Configure the bot**
-   - Edit `bot-config.rsc` with your bot token and chat ID
-   - Add trusted user IDs
-   - Adjust monitoring thresholds as needed
-
-4. **Automated Deployment (Recommended)**
+4. **Configure and deploy**
    ```routeros
-   /system/script/run deploy
-   ```
-   
-   **Or Manual Setup:**
-   ```routeros
-   /system/script/run bot-config
-   /system/script/run bot-core
+   :global TelegramTokenId "YOUR_BOT_TOKEN"
+   :global TelegramChatId "YOUR_CHAT_ID"
+   :global TelegramChatIdsTrusted "YOUR_CHAT_ID"
+   :global BotConfigReady true
+   /import deploy.rsc
    ```
 
-5. **Verify Installation**
-   ```routeros
-   /system/script/run verify-installation
-   ```
-
-6. **Test the bot**
-   - Send `/help` to your bot in Telegram
-   - You should receive a list of available commands
+5. **Test the bot**
+   - Send `?` to your bot in Telegram
+   - You should receive a greeting message
 
 **Having issues?** Run the troubleshooting script:
 ```routeros
-/system/script/run troubleshoot
+/system script run troubleshoot
 ```
 
-## Architecture
+## Project Structure
 
 ```
 mikrotik-telegram-bot/
 ├── scripts/
-│   ├── bot-core.rsc                    # Main bot logic and command processing
-│   ├── bot-config.rsc                  # Configuration template
-│   ├── deploy.rsc                      # Automated deployment script ⭐ NEW
-│   ├── verify-installation.rsc         # Installation verification ⭐ NEW
-│   ├── troubleshoot.rsc                # Automated troubleshooting ⭐ NEW
+│   ├── bot-config.rsc           # Configuration template
+│   ├── bot-core.rsc             # Main bot logic and command processing
+│   ├── deploy.rsc               # Automated deployment script
+│   ├── verify-installation.rsc  # Installation verification
+│   ├── troubleshoot.rsc         # Automated troubleshooting
 │   └── modules/
-│       ├── monitoring.rsc              # System monitoring and alerts
-│       ├── backup.rsc                  # Backup management
-│       ├── custom-commands.rsc         # Custom command handlers
-│       └── wireless-monitoring.rsc     # Wireless monitoring ⭐ NEW
+│       ├── monitoring.rsc       # System monitoring and alerts
+│       ├── backup.rsc           # Backup management
+│       ├── custom-commands.rsc  # Custom command handlers
+│       ├── wireless-monitoring.rsc # Wireless monitoring
+│       └── daily-summary.rsc    # Daily status reports
 ├── setup/
-│   ├── installation.md                 # Detailed installation guide
-│   ├── telegram-setup.md               # Telegram bot creation walkthrough
-│   └── security-hardening.md           # Security best practices ⭐ NEW
+│   ├── installation.md          # Detailed installation guide
+│   ├── telegram-setup.md        # Telegram bot creation walkthrough
+│   └── security-hardening.md    # Security best practices
 ├── examples/
-│   └── usage-examples.md               # Usage examples and scenarios
-├── README.md                           # Project overview
-├── QUICKSTART.md                       # 15-minute setup guide ⭐ NEW
-├── FAQ.md                              # Frequently asked questions ⭐ NEW
-├── PERFORMANCE.md                      # Performance optimization ⭐ NEW
-├── CONTRIBUTING.md                     # Contribution guidelines
-├── CHANGELOG.md                        # Version history
-└── LICENSE                             # GPL-3.0 license
+│   └── usage-examples.md        # Usage examples and scenarios
+├── README.md                    # This file
+├── QUICKSTART.md                # Quick setup guide
+├── FAQ.md                       # Frequently asked questions
+├── CONTRIBUTING.md              # Contribution guidelines
+├── CHANGELOG.md                 # Version history
+└── LICENSE                      # GPL-3.0 license
 ```
 
 ## Configuration
 
-Edit `scripts/bot-config.rsc` to customize your bot:
+Edit `scripts/bot-config.rsc` or set variables directly:
 
 ```routeros
-# Telegram Bot Configuration
+# Telegram Bot Credentials (REQUIRED)
 :global TelegramTokenId "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
 :global TelegramChatId "987654321"
-:global TelegramChatIdsTrusted ({
-  987654321;        # Your Telegram user ID
-  "@yourusername"   # Or your username
-})
+:global TelegramChatIdsTrusted "987654321"
 
 # Monitoring Thresholds
-:global MonitorCPUThreshold 75
-:global MonitorRAMThreshold 80
-:global MonitorTempThreshold 60
-:global MonitorDiskThreshold 90
+:global MonitorCPUThreshold 75       # CPU % alert threshold
+:global MonitorRAMThreshold 80       # RAM % alert threshold
+:global MonitorDiskThreshold 90      # Disk % alert threshold
+:global MonitorTempThreshold 60      # Temperature °C threshold
 
 # Backup Settings
-:global BackupRetention 7        # Keep last 7 backups
-:global BackupAutoSend true      # Send backup files to Telegram
+:global EnableAutoBackup true
+:global BackupRetention 7            # Keep last 7 backups
+
+# Security Settings
+:global CommandRateLimit 10          # Commands per minute per user
+:global RequireConfirmation true     # Require confirmation for dangerous commands
+:global EnableCommandWhitelist false # Restrict to whitelisted commands only
+:global MaxFailedAttempts 5          # Block after N failed attempts
+:global BlockDuration 30             # Block duration in minutes
 
 # Feature Toggles
 :global EnableAutoMonitoring true
-:global MonitoringInterval "5m"
-:global EnableAutoBackup true
+:global SendDailySummary true
+:global DailySummaryTime "08:00"
 ```
 
 ## Usage Examples
 
 ### Basic Commands
 
-**Get system status:**
 ```
-/status
-```
-
-**Check interfaces:**
-```
-/interfaces
-```
-
-**View DHCP leases:**
-```
-/dhcp
+?                    # Check bot status
+/help                # Show available commands
+/status              # System status
+/interfaces          # Interface statistics
+/dhcp                # DHCP leases
+/logs                # Recent logs
+/backup now          # Create backup
 ```
 
 ### Advanced Usage
 
-**Execute custom RouterOS command:**
+**Activate device and execute command:**
 ```
-! YourRouterName
+! RouterName
 /ip address print
 ```
 
-**Create on-demand backup:**
-```
-/backup now
-```
-
-**Check for updates:**
-```
-/update check
-```
-
-**Safe reboot with confirmation:**
-```
-/reboot confirm
-```
-
-### Multi-Device Management
-
-**Activate all devices:**
+**Multi-device activation:**
 ```
 ! @all
 /system resource print
 ```
 
-**Activate specific device:**
+### Confirmation Flow
+
+Dangerous commands require confirmation:
 ```
-! RouterName
-/interface print stats
+You: /system reboot
+
+Bot: ⚠️ Confirmation Required
+     To confirm, send: CONFIRM XK92MN
+
+You: CONFIRM XK92MN
+
+Bot: 🔄 Rebooting router...
 ```
-
-For more examples, see [Usage Examples](examples/usage-examples.md).
-
-## Security Best Practices
-
-1. **Whitelist Users Only**: Add only trusted user IDs to `TelegramChatIdsTrusted`
-2. **Use Private Chats**: Avoid adding the bot to public groups
-3. **Secure Your Token**: Never share your bot token publicly
-4. **Regular Audits**: Review command logs regularly
-5. **Network Isolation**: Consider firewall rules for Telegram API access
-6. **Update Regularly**: Keep RouterOS and scripts up to date
 
 ## Troubleshooting
 
 ### Quick Diagnosis
 
-**Automated Troubleshooting (Recommended):**
 ```routeros
-/system/script/run troubleshoot
+# Automated troubleshooting
+/system script run troubleshoot
+
+# Verify installation
+/system script run verify-installation
+
+# Manual bot test
+/system script run bot-core
 ```
 
-This script will:
-- Check all configurations
-- Verify connectivity
-- Test certificates
-- Identify common issues
-- Provide specific recommendations
+### Common Issues
 
-### Manual Troubleshooting
-
-#### Bot doesn't respond
-```routeros
-# 1. Verify installation
-/system/script/run verify-installation
-
-# 2. Check scheduler
-/system/scheduler/print where name="telegram-bot"
-
-# 3. Test connectivity
-/tool/fetch url=https://api.telegram.org mode=https
-
-# 4. Check certificate
-/certificate print where common-name~"Go Daddy"
-
-# 5. Review logs
-/log/print where topics~"script"
-```
-
-#### Commands fail to execute
-- Verify you're in the trusted users list
-- Check syntax of your command
-- Review logs: `/log/print where topics~"script"`
-- Check script policies: `/system/script print detail where name="bot-core"`
-
-#### Monitoring alerts not working
-- Verify monitoring module is scheduled
-- Check thresholds in `bot-config.rsc`
-- Ensure notifications are enabled
-- Run manually: `/system/script/run modules/monitoring`
-
-#### Backup files not received
-- Check router storage space
-- Verify Telegram API connectivity
-- Check file size (Telegram has 50MB limit)
-- Run manually: `/system/script/run modules/backup`
+| Issue | Solution |
+|-------|----------|
+| Bot doesn't respond | Check scheduler: `/system scheduler print where name~"telegram"` |
+| Certificate error | Import cert: `/tool fetch url=https://cacerts.digicert.com/GoDaddyRootCertificateAuthorityG2.crt.pem` |
+| Commands fail | Check trusted list, verify syntax, review logs |
+| Rate limited | Wait 1 minute or increase `CommandRateLimit` |
 
 ### Resources
 
 - **FAQ**: [Frequently Asked Questions](FAQ.md)
-- **Detailed Guide**: [Installation Guide](setup/installation.md)
-- **Security**: [Security Hardening Guide](setup/security-hardening.md)
-- **Performance**: [Performance Optimization](PERFORMANCE.md)
+- **Installation**: [Detailed Guide](setup/installation.md)
+- **Security**: [Hardening Guide](setup/security-hardening.md)
+- **Examples**: [Usage Examples](examples/usage-examples.md)
+
+## Security Best Practices
+
+1. **Whitelist Users**: Only add trusted user IDs
+2. **Private Chats**: Avoid adding bot to public groups
+3. **Secure Token**: Never share your bot token
+4. **Enable Confirmation**: Keep `RequireConfirmation` enabled
+5. **Review Logs**: Check `/log print where topics~"script"` regularly
+6. **Update Regularly**: Keep RouterOS and scripts current
 
 ## Contributing
 
-Contributions are welcome! This project is based on the excellent [RouterOS Scripts](https://github.com/eworm-de/routeros-scripts) by Christian Hesse.
-
-### How to Contribute
-1. Fork the repository
-2. Create a feature branch
-3. Test your changes on a RouterOS device
-4. Submit a pull request
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## Credits
 
-This project is built upon and inspired by:
+Built upon and inspired by:
 - [RouterOS Scripts](https://github.com/eworm-de/routeros-scripts) by eworm-de
 - MikroTik RouterOS documentation
 - Telegram Bot API
 
-Special thanks to Christian Hesse for the excellent foundation scripts.
-
 ## License
 
-GNU General Public License v3.0
-
-This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+GNU General Public License v3.0 - See [LICENSE](LICENSE) for details.
 
 ## Disclaimer
 
-This software is provided "as is" without warranty of any kind. Use at your own risk. Always test in a non-production environment first.
-
-## Support
-
-- **Documentation**: Check the [setup](setup/) and [examples](examples/) directories
-- **Issues**: Report bugs via GitHub issues
-- **Telegram**: Join the RouterOS Scripts community [@routeros_scripts](https://t.me/routeros_scripts)
-
-## Changelog
-
-### v1.0.0 (Initial Release)
-- Interactive command execution via Telegram
-- System monitoring with automatic alerts
-- Backup management with Telegram delivery
-- User-friendly command aliases
-- Multi-device support
-- Comprehensive documentation
+This software is provided "as is" without warranty. Use at your own risk. Always test in a non-production environment first.
 
 ---
 
 **Made with ❤️ for the MikroTik community**
-

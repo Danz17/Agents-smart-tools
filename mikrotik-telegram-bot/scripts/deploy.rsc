@@ -81,7 +81,10 @@
 :put "[Step 3/8] Creating scripts..."
 
 :local Scripts ({
+  "bot-config";
   "bot-core";
+  "verify-installation";
+  "troubleshoot";
   "modules/monitoring";
   "modules/backup";
   "modules/custom-commands";
@@ -90,31 +93,52 @@
 })
 
 :local ScriptsCreated 0
+:local ScriptsUpdated 0
 :foreach Script in=$Scripts do={
   :local FileName ($Script . ".rsc")
   
-  :if ([:len [/file find where name=$FileName]] > 0) do={
+  # Support both directory uploads (e.g. "modules/monitoring.rsc") and flat uploads
+  # (e.g. "monitoring.rsc" in the root file store).
+  :local FileCandidates ({ $FileName })
+  :if ($Script ~ "^modules/") do={
+    :local BaseName [:pick $Script 8 [:len $Script]]
+    :set FileCandidates ($FileCandidates, ($BaseName . ".rsc"))
+  }
+
+  :local FoundFile ""
+  :foreach Cand in=$FileCandidates do={
+    :if ([:len [/file find where name=$Cand]] > 0) do={
+      :set FoundFile $Cand
+      :break
+    }
+  }
+
+  :if ($FoundFile != "") do={
     :onerror ScriptErr {
-      # Check if script already exists
-      :if ([:len [/system script find where name=$Script]] > 0) do={
-        :put ("  ⚠ Script already exists: " . $Script)
+      :local Existing [/system script find where name=$Script]
+      :if ([:len $Existing] > 0) do={
+        /system script set $Existing source=[/file get $FoundFile contents] \
+          policy=ftp,read,write,policy,test,password,sniff,sensitive,romon
+        :set ScriptsUpdated ($ScriptsUpdated + 1)
+        :put ("  ✓ Updated script: " . $Script)
       } else={
-        /system script add name=$Script source=[/file get $FileName contents] \
+        /system script add name=$Script source=[/file get $FoundFile contents] \
           policy=ftp,read,write,policy,test,password,sniff,sensitive,romon
         :set ScriptsCreated ($ScriptsCreated + 1)
         :put ("  ✓ Created script: " . $Script)
       }
     } do={
-      :put ("  ✗ Failed to create script " . $Script . ": " . $ScriptErr)
+      :put ("  ✗ Failed to create/update script " . $Script . ": " . $ScriptErr)
       :set DeploymentFailed true
     }
   } else={
-    :put ("  ⚠ File not found: " . $FileName)
+    :put ("  ⚠ File not found for script: " . $Script)
+    :put ("    Expected: " . $FileName)
   }
 }
 
-:if ($ScriptsCreated > 0) do={
-  :put ("  ✓ Created " . $ScriptsCreated . " script(s)")
+:if (($ScriptsCreated + $ScriptsUpdated) > 0) do={
+  :put ("  ✓ Scripts processed - Created: " . $ScriptsCreated . ", Updated: " . $ScriptsUpdated)
 }
 
 # ============================================================================
@@ -126,10 +150,15 @@
 :onerror ConfigErr {
   :if ([:len [/file find where name="bot-config.rsc"]] > 0) do={
     /import bot-config.rsc
-    :put "  ✓ Configuration loaded"
+    :put "  ✓ Configuration loaded (imported bot-config.rsc)"
   } else={
-    :put "  ⚠ bot-config.rsc not found"
-    :put "  Please upload and configure bot-config.rsc"
+    :if ([:len [/system script find where name="bot-config"]] > 0) do={
+      /system script run bot-config
+      :put "  ✓ Configuration loaded (ran script bot-config)"
+    } else={
+      :put "  ⚠ bot-config.rsc not found and script bot-config missing"
+      :put "    Please upload and configure bot-config.rsc"
+    }
   }
 } do={
   :put ("  ⚠ Configuration load failed: " . $ConfigErr)
@@ -297,4 +326,3 @@
 :put ""
 
 :log info ($ScriptName . " - Deployment complete. Success: " . ($DeploymentFailed = false))
-
