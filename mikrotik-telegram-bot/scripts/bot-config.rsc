@@ -23,12 +23,8 @@
 
 # List of trusted user IDs who can control the bot
 # Can be numeric IDs or usernames (with @ prefix)
-:global TelegramChatIdsTrusted (\
-    "YOUR_CHAT_ID_HERE" \
-    # Add more trusted users below: \
-    # "123456789" \
-    # "@username" \
-)
+# Add more users by separating with semicolons: ("id1";"id2";"@username")
+:global TelegramChatIdsTrusted ("YOUR_CHAT_ID_HERE")
 
 # Thread ID for topic groups (optional)
 # Leave empty for regular groups or private chats

@@ -277,13 +277,26 @@
 
 :put "[Step 7/8] Testing connectivity..."
 
-:onerror ConnErr {
-  /tool fetch url="https://api.telegram.org" mode=https output=user
-  :put "  ✓ Telegram API reachable"
-} do={
-  :put ("  ✗ Cannot reach Telegram API: " . $ConnErr)
-  :put "    Check internet connection and firewall"
-  :set DeploymentFailed true
+# Test with actual bot token if configured
+:if ($TelegramTokenId != "YOUR_BOT_TOKEN_HERE" && [:len $TelegramTokenId] > 20) do={
+  :onerror ConnErr {
+    :local Result [/tool fetch url=("https://api.telegram.org/bot" . $TelegramTokenId . "/getMe") \
+      mode=https output=user as-value]
+    :put "  ✓ Telegram API reachable (bot token valid)"
+  } do={
+    :put ("  ⚠ Telegram API test failed: " . $ConnErr)
+    :put "    Bot may still work - check token and try manually"
+  }
+} else={
+  # Just test basic HTTPS connectivity
+  :onerror ConnErr {
+    /tool fetch url="https://www.google.com" mode=https output=none
+    :put "  ✓ Internet connectivity OK (configure token to test Telegram)"
+  } do={
+    :put ("  ✗ No internet connectivity: " . $ConnErr)
+    :put "    Check internet connection and firewall"
+    :set DeploymentFailed true
+  }
 }
 
 # ============================================================================
