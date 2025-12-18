@@ -513,10 +513,13 @@
       }
 
       # Check if user is trusted
-      :foreach IdsTrusted in=($TelegramChatId, $TelegramChatIdsTrusted) do={
-        :if ($From->"id" = $IdsTrusted || \
-             $From->"username" = $IdsTrusted || \
-             $Chat->"id" = $IdsTrusted) do={
+      :local FromId [:tostr ($From->"id")];
+      :local ChatIdStr [:tostr ($Chat->"id")];
+      :if ($FromId = $TelegramChatId || $ChatIdStr = $TelegramChatId) do={
+        :set Trusted true;
+      }
+      :if ($Trusted = false && [:len $TelegramChatIdsTrusted] > 0) do={
+        :if ($FromId = $TelegramChatIdsTrusted || $ChatIdStr = $TelegramChatIdsTrusted) do={
           :set Trusted true;
         }
       }
