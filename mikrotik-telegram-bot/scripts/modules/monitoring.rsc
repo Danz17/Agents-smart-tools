@@ -190,14 +190,14 @@
   # ============================================================================
   
   :onerror TempErr {
-    :local Temp [ /system/health/get temperature ];
-    :if ($Temp > $MonitorTempThreshold) do={
+    :local TempVal [ /system/health/get value-name=temperature ];
+    :if ([:typeof $TempVal] = "num" && $TempVal > $MonitorTempThreshold) do={
       $SendTelegram2 ({ origin=$ScriptName; silent=false; \
         subject="🌡️ Temperature Alert"; \
         message=("Temperature on " . $Identity . " is high!\n\n" . \
-          "Current: " . $Temp . "°C\n" . \
+          "Current: " . $TempVal . "°C\n" . \
           "Threshold: " . $MonitorTempThreshold . "°C") });
-      :log warning ($ScriptName . " - Temperature high: " . $Temp . "°C");
+      :log warning ($ScriptName . " - Temperature high: " . $TempVal . "°C");
     }
   } do={
     :log debug ($ScriptName . " - No temperature sensor available");

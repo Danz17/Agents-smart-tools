@@ -150,13 +150,17 @@
       :set TelegramMessageIDs ({});
     }
     
-    :local Text ("*__" . [$EscapeMD ("[" . $IdentityExtra . $Identity . "] " . \
-      ($Notification->"subject")) "plain"] . "__*\n\n");
-    :set Text ($Text . [$EscapeMD ($Notification->"message") "body"]);
+    :local Subject [:tostr ($Notification->"subject")];
+    :local Msg [:tostr ($Notification->"message")];
+    :local IdentStr [:tostr $Identity];
+    :if ([:typeof $IdentityExtra] = "str") do={
+      :set IdentStr ($IdentityExtra . $IdentStr);
+    }
+    :local Text ("[" . $IdentStr . "] " . $Subject . "\n\n" . $Msg);
     
     :local HTTPData ("chat_id=" . $ChatId . "&disable_notification=" . \
       ($Notification->"silent") . "&reply_to_message_id=" . ($Notification->"replyto") . \
-      "&message_thread_id=" . $ThreadId . "&disable_web_page_preview=true&parse_mode=MarkdownV2");
+      "&message_thread_id=" . $ThreadId . "&disable_web_page_preview=true");
     
     :onerror SendErr {
       :if ([$CertificateAvailable "Go Daddy Root Certificate Authority - G2"] = false) do={
