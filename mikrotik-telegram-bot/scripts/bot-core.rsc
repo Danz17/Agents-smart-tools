@@ -492,6 +492,29 @@
   :if ([:typeof $TelegramRandomDelay] != "num") do={
     :set TelegramRandomDelay 0;
   }
+  
+  # Load persisted state on startup (if available)
+  :local StateFile "tmpfs/bot-state-runtime.txt";
+  :onerror LoadStateErr {
+    :if ([:len [/file find name=$StateFile]] > 0) do={
+      :local StateData ([/file get $StateFile contents]);
+      :if ([:len $StateData] > 0) do={
+        :local StateJSON [ :deserialize from=json value=$StateData ];
+        :if ([:typeof ($StateJSON->"offset")] = "array") do={
+          :set TelegramChatOffset ($StateJSON->"offset");
+        }
+        :if ([:typeof ($StateJSON->"blocked")] = "array") do={
+          :set BlockedUsers ($StateJSON->"blocked");
+        }
+        :if ([:typeof ($StateJSON->"pending")] = "array") do={
+          :set PendingConfirmations ($StateJSON->"pending");
+        }
+        :log debug ($ScriptName . " - Loaded persisted state");
+      }
+    }
+  } do={
+    :log debug ($ScriptName . " - No persisted state found (first run)");
+  }
 
   :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
     :log warning ($ScriptName . " - Certificate ISRG Root X1 not found, continuing with check-certificate=no");
