@@ -1,4 +1,16 @@
-# MikroTik Telegram Bot - Git Ignore
+# TxMTC - Telegram x MikroTik Tunnel Controller Sub-Agent
+# Git Ignore
+
+# Claude Code / AI assistant files
+.claude/
+
+# Local backups folder
+backups/
+
+# Local helper scripts (not part of the bot)
+ssh_helper.py
+organize-*.rsc
+FILE-ORGANIZATION-README.txt
 
 # Sensitive configuration files
 **/bot-config-local.rsc

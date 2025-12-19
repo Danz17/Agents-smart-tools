@@ -1,6 +1,11 @@
 #!rsc by RouterOS
-# MikroTik Telegram Bot - Telegram API Module
-# https://github.com/Danz17/Agents-smart-tools/tree/main/mikrotik-telegram-bot
+# ═══════════════════════════════════════════════════════════════════════════
+# TxMTC - Telegram x MikroTik Tunnel Controller Sub-Agent
+# Telegram API Module
+# ───────────────────────────────────────────────────────────────────────────
+# GitHub: https://github.com/Danz17/Agents-smart-tools
+# Author: P̷h̷e̷n̷i̷x̷ | Crafted with love & frustration
+# ═══════════════════════════════════════════════════════════════════════════
 #
 # requires RouterOS, version=7.15
 #
@@ -88,7 +93,7 @@
         http-data=($HTTPData . "&text=" . [$UrlEncode $Text]) as-value ]->"data");
     }
     # Store message ID for reply tracking
-    :local MsgId [ :tostr ([ :deserialize from=json value=$Data ]->"result"->"message_id") ];
+    :local MsgId [ :tostr ([ :deserialize from=json $Data ]->"result"->"message_id") ];
     :set ($TelegramMessageIDs->$MsgId) 1;
     :return $MsgId;
   } do={
@@ -154,7 +159,7 @@
     :return;
   }
   
-  :local JSON [ :deserialize from=json value=$Data ];
+  :local JSON [ :deserialize from=json $Data ];
   :local Count [ :len ($JSON->"result") ];
   
   :if ($Count = 0) do={
@@ -217,7 +222,7 @@
     :return;
   }
   
-  :return [ :deserialize from=json value=$Data ];
+  :return [ :deserialize from=json $Data ];
 }
 
 # ============================================================================

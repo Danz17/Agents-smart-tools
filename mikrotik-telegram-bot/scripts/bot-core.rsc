@@ -1,11 +1,15 @@
 #!rsc by RouterOS
-# MikroTik Telegram Bot - Core Script
-# https://github.com/Danz17/Agents-smart-tools/tree/main/mikrotik-telegram-bot
+# ═══════════════════════════════════════════════════════════════════════════
+# TxMTC - Telegram x MikroTik Tunnel Controller Sub-Agent
+# Core Script - Main bot loop
+# ───────────────────────────────────────────────────────────────────────────
+# GitHub: https://github.com/Danz17/Agents-smart-tools
+# Author: P̷h̷e̷n̷i̷x̷ | Crafted with love & frustration
+# ═══════════════════════════════════════════════════════════════════════════
 #
 # requires RouterOS, version=7.15
 # requires device-mode, fetch
 #
-# Main bot loop - polls Telegram and processes commands
 # Dependencies: bot-config, modules/shared-functions, modules/telegram-api, modules/security
 
 :local ExitOK false;
@@ -113,7 +117,7 @@
     :if ([:len [/file find name=$StateFile]] > 0) do={
       :local StateData ([/file get $StateFile contents]);
       :if ([:len $StateData] > 0) do={
-        :local StateJSON [ :deserialize from=json value=$StateData ];
+        :local StateJSON [ :deserialize from=json $StateData ];
         :if ([:typeof ($StateJSON->"offset")] = "array") do={
           :set TelegramChatOffset ($StateJSON->"offset");
         }
@@ -155,7 +159,7 @@
       }
     }
     :if ($Data != false) do={
-      :set JSON [ :deserialize from=json value=$Data ];
+      :set JSON [ :deserialize from=json $Data ];
     }
   }
 
@@ -209,23 +213,22 @@
         # Check if user is blocked
         :if ([:typeof $IsUserBlocked] = "array" && [$IsUserBlocked $FromId] = true) do={
           :log warning ($ScriptName . " - Blocked user " . $FromId . " attempted access");
-          $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=false; \
+          $SendTelegram2 ({ chatid=($Chat->"id"); silent=false; \
             replyto=($Message->"message_id"); threadid=$ThreadId; \
-            subject="🚫 Temporarily Blocked"; \
-            message=("You are temporarily blocked due to too many failed attempts.\nPlease wait " . $BlockDuration . " minutes.") });
+            subject="⚡ TxMTC | Blocked"; \
+            message=("Temporarily blocked - too many failed attempts.\nWait " . $BlockDuration . " min.") });
           :set Done true;
         }
         
         # Handle "?" - device query
         :if ($Done = false && $Command = "?") do={
           :log info ($ScriptName . " - Status query from update " . $UpdateID);
-          :local ActiveStatus "";
-          :if ($TelegramChatActive = true) do={ :set ActiveStatus " (and active!)"; }
-          $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=true; \
+          :local ActiveStatus "passive";
+          :if ($TelegramChatActive = true) do={ :set ActiveStatus "active"; }
+          $SendTelegram2 ({ chatid=($Chat->"id"); silent=true; \
             replyto=($Message->"message_id"); threadid=$ThreadId; \
-            subject="🤖 Telegram Bot"; \
-            message=("Hello " . ($From->"first_name") . "!\n\n" . \
-              "Online" . $ActiveStatus . ", awaiting your commands!") });
+            subject="⚡ TxMTC"; \
+            message=("Hey " . ($From->"first_name") . "! Online & " . $ActiveStatus . " | /help") });
           :set Done true;
         }
         
@@ -245,37 +248,28 @@
         
         # Handle /help command
         :if ($Done = false && $Command = "/help") do={
-          :local HelpText ("*Available Commands:*\n\n" . \
-            "📱 *Bot Control:*\n" . \
-            "`?` - Check bot status\n" . \
-            "`! identity` - Activate device\n" . \
-            "`! @all` - Activate all devices\n\n" . \
-            "📊 *Information:*\n" . \
-            "`/status` - System status\n" . \
-            "`/interfaces` - Interface stats\n" . \
-            "`/dhcp` - DHCP leases\n" . \
-            "`/logs` - System logs\n" . \
-            "`/wireless` - Wireless clients\n\n" . \
-            "💾 *Management:*\n" . \
-            "`/backup` - Create backup\n" . \
-            "`/update` - Check updates\n\n" . \
-            "⚡ *Advanced:*\n" . \
-            "Activate device and send any RouterOS command\n\n" . \
+          :local HelpText ("*⚡ TxMTC v2.0*\n\n" . \
+            "📱 *Control:*\n" . \
+            "`?` - Status | `! identity` - Activate\n\n" . \
+            "📊 *Info:*\n" . \
+            "`/status` `/interfaces` `/dhcp` `/logs` `/wireless`\n\n" . \
+            "💾 *Manage:*\n" . \
+            "`/backup` `/update`\n\n" . \
+            "⚙️ *Execute:*\n" . \
+            "Activate & send any RouterOS command\n\n" . \
             "🛡️ *Security:*\n" . \
-            "• Rate limit: " . $CommandRateLimit . " cmds/min\n" . \
-            "• Dangerous commands require confirmation\n" . \
-            "• Use `CONFIRM code` to confirm");
-          
-          $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=true; \
+            "Rate: " . $CommandRateLimit . "/min | `CONFIRM code`\n\n" . \
+            "─── by P̷h̷e̷n̷i̷x̷");
+
+          $SendTelegram2 ({ chatid=($Chat->"id"); silent=true; \
             replyto=($Message->"message_id"); threadid=$ThreadId; \
-            subject="📚 Bot Help"; message=$HelpText });
+            subject="⚡ TxMTC | Help"; message=$HelpText });
           :set Done true;
         }
         
-        # Handle confirmation code
-        :local CommandUpper [:toupper $Command];
-        :if ($Done = false && $CommandUpper ~ "^CONFIRM [A-Z0-9]+\$") do={
-          :local ConfirmCode [:pick $CommandUpper 8 [:len $CommandUpper]];
+        # Handle confirmation code (case-insensitive)
+        :if ($Done = false && $Command ~ "^[Cc][Oo][Nn][Ff][Ii][Rr][Mm] [A-Za-z0-9]+\$") do={
+          :local ConfirmCode [:pick $Command 8 [:len $Command]];
           :local ConfirmedCmd "";
           :if ([:typeof $CheckConfirmation] = "array") do={
             :set ConfirmedCmd [$CheckConfirmation $FromId $ConfirmCode];
@@ -285,9 +279,9 @@
             :log info ($ScriptName . " - User " . $FromId . " confirmed: " . $ConfirmedCmd);
             :set Command $ConfirmedCmd;
           } else={
-            $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=false; \
+            $SendTelegram2 ({ chatid=($Chat->"id"); silent=false; \
               replyto=($Message->"message_id"); threadid=$ThreadId; \
-              subject="❌ Invalid Confirmation"; \
+              subject="⚡ TxMTC | Invalid"; \
               message="Invalid or expired confirmation code.\nPlease request the command again." });
             :set Done true;
           }
@@ -299,9 +293,9 @@
           
           # Check rate limit
           :if ([:typeof $CheckRateLimit] = "array" && [$CheckRateLimit $FromId] = false) do={
-            $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=false; \
+            $SendTelegram2 ({ chatid=($Chat->"id"); silent=false; \
               replyto=($Message->"message_id"); threadid=$ThreadId; \
-              subject="⏳ Rate Limited"; \
+              subject="⚡ TxMTC | Rate Limit"; \
               message=("You are sending commands too fast.\nLimit: " . $CommandRateLimit . " commands per minute.") });
             :set Done true;
           }
@@ -314,9 +308,9 @@
             
             # Check dangerous commands blocklist
             :if ([:typeof $IsDangerousCommand] = "array" && [$IsDangerousCommand $Command] = true) do={
-              $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=false; \
+              $SendTelegram2 ({ chatid=($Chat->"id"); silent=false; \
                 replyto=($Message->"message_id"); threadid=$ThreadId; \
-                subject="🚫 Command Blocked"; \
+                subject="⚡ TxMTC | Blocked"; \
                 message=("This command is blocked for security reasons.\n\nCommand: " . $Command) });
               :log warning ($ScriptName . " - Blocked command: " . $Command);
               :set Done true;
@@ -324,9 +318,9 @@
             
             # Check whitelist
             :if ($Done = false && [:typeof $CheckWhitelist] = "array" && [$CheckWhitelist $Command] = false) do={
-              $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=false; \
+              $SendTelegram2 ({ chatid=($Chat->"id"); silent=false; \
                 replyto=($Message->"message_id"); threadid=$ThreadId; \
-                subject="🚫 Command Not Allowed"; \
+                subject="⚡ TxMTC | Not Allowed"; \
                 message=("This command is not in the whitelist.\n\nCommand: " . $Command) });
               :log warning ($ScriptName . " - Non-whitelisted command: " . $Command);
               :set Done true;
@@ -339,9 +333,9 @@
             :if ([:typeof $StorePendingConfirmation] = "array") do={
               :set ConfirmCode [$StorePendingConfirmation $FromId $Command ($Message->"message_id")];
             }
-            $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=false; \
+            $SendTelegram2 ({ chatid=($Chat->"id"); silent=false; \
               replyto=($Message->"message_id"); threadid=$ThreadId; \
-              subject="⚠️ Confirmation Required"; \
+              subject="⚡ TxMTC | Confirm?"; \
               message=("This command requires confirmation:\n\n" . \
                 "Command: `" . $Command . "`\n\n" . \
                 "To confirm, send:\n`CONFIRM " . $ConfirmCode . "`\n\n" . \
@@ -402,9 +396,9 @@
                 :set OutputText "📝 No output.";
               }
               
-              $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=true; \
+              $SendTelegram2 ({ chatid=($Chat->"id"); silent=true; \
                 replyto=($Message->"message_id"); threadid=$ThreadId; \
-                subject="⚙️ Command Result"; \
+                subject="⚡ TxMTC | Result"; \
                 message=("⚙️ Command:\n" . $Command . "\n\n" . $State . $OutputText) });
               
               # Cleanup temp files
@@ -413,9 +407,9 @@
               :if ([:len [/file find name=($TmpFile . ".failed")]] > 0) do={ /file remove ($TmpFile . ".failed"); }
             } else={
               :log info ($ScriptName . " - Syntax validation failed for update " . $UpdateID);
-              $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=false; \
+              $SendTelegram2 ({ chatid=($Chat->"id"); silent=false; \
                 replyto=($Message->"message_id"); threadid=$ThreadId; \
-                subject="⚙️ Command Error"; \
+                subject="⚡ TxMTC | Error"; \
                 message=("⚙️ Command:\n" . $Command . "\n\n❌ Syntax validation failed!") });
             }
           }
@@ -433,9 +427,9 @@
         :if ($Command ~ ("^! *" . $Identity . "\$")) do={
           :log warning ($ScriptName . " - " . $MessageText . " attempted activation");
           :if ($NotifyUntrustedAttempts = true) do={
-            $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=false; \
+            $SendTelegram2 ({ chatid=($Chat->"id"); silent=false; \
               replyto=($Message->"message_id"); threadid=$ThreadId; \
-              subject="🚫 Access Denied"; message="You are not trusted." });
+              subject="⚡ TxMTC | Denied"; message="Not trusted." });
           }
         } else={
           :log info ($ScriptName . " - " . $MessageText);

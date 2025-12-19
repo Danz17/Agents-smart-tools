@@ -1,9 +1,40 @@
 # Changelog
 
-All notable changes to the MikroTik Telegram Bot project will be documented in this file.
+All notable changes to **TxMTC** (Telegram x MikroTik Tunnel Controller Sub-Agent) will be documented in this file.
+
+*Crafted with love & frustration by P̷h̷e̷n̷i̷x̷*
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [2.0.0] - 2025-12-20
+
+### 🎨 Complete Rebrand - TxMTC by P̷h̷e̷n̷i̷x̷
+
+The project has been rebranded from "MikroTik Telegram Bot" to **TxMTC** (Telegram x MikroTik Tunnel Controller Sub-Agent).
+
+### Added
+- ASCII art PHENIX banner in installation output
+- P̷h̷e̷n̷i̷x̷ creator branding throughout
+- Friendly-minimal bot reply style (`⚡ TxMTC` prefix)
+- Roadmap section in README.md
+- Future enhancements tracking (auto-updater, WebApp, hotspot monitoring)
+
+### Changed
+- All script headers updated with new TxMTC branding
+- Bot reply subjects now use `⚡ TxMTC | [Type]` format
+- Help text redesigned for minimal, scannable output
+- README.md completely rewritten with new branding
+- QUICKSTART.md updated with TxMTC references
+- Installation banner shows PHENIX ASCII art
+
+### Improved
+- Cleaner, more concise bot responses
+- Better organization of help command output
+- Unified branding across all 11 scripts
+- Consistent header format with GitHub link
+
+---
 
 ## [1.0.0] - 2024-12-17
 

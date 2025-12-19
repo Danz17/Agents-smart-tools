@@ -1,6 +1,11 @@
 #!rsc by RouterOS
-# MikroTik Telegram Bot - Security Module
-# https://github.com/Danz17/Agents-smart-tools/tree/main/mikrotik-telegram-bot
+# ═══════════════════════════════════════════════════════════════════════════
+# TxMTC - Telegram x MikroTik Tunnel Controller Sub-Agent
+# Security Module
+# ───────────────────────────────────────────────────────────────────────────
+# GitHub: https://github.com/Danz17/Agents-smart-tools
+# Author: P̷h̷e̷n̷i̷x̷ | Crafted with love & frustration
+# ═══════════════════════════════════════════════════════════════════════════
 #
 # requires RouterOS, version=7.15
 #
@@ -26,11 +31,10 @@
 :global IsDangerousCommand do={
   :local Command [ :tostr $1 ];
   :global DangerousCommands;
-  
-  :local CommandUpper [:toupper $Command];
+
+  # Case-insensitive comparison using regex
   :foreach DangerousCmd in=$DangerousCommands do={
-    :local DangerousUpper [:toupper $DangerousCmd];
-    :if ($CommandUpper ~ ("^" . $DangerousUpper)) do={
+    :if ($Command ~ ("(?i)^" . $DangerousCmd)) do={
       :return true;
     }
   }

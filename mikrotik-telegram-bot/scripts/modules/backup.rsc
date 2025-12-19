@@ -1,6 +1,11 @@
 #!rsc by RouterOS
-# MikroTik Telegram Bot - Backup Module
-# https://github.com/Danz17/Agents-smart-tools/tree/main/mikrotik-telegram-bot
+# ═══════════════════════════════════════════════════════════════════════════
+# TxMTC - Telegram x MikroTik Tunnel Controller Sub-Agent
+# Backup Module
+# ───────────────────────────────────────────────────────────────────────────
+# GitHub: https://github.com/Danz17/Agents-smart-tools
+# Author: P̷h̷e̷n̷i̷x̷ | Crafted with love & frustration
+# ═══════════════════════════════════════════════════════════════════════════
 #
 # requires RouterOS, version=7.15
 #

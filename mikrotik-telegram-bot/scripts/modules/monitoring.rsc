@@ -1,6 +1,11 @@
 #!rsc by RouterOS
-# MikroTik Telegram Bot - Monitoring Module
-# https://github.com/Danz17/Agents-smart-tools/tree/main/mikrotik-telegram-bot
+# ═══════════════════════════════════════════════════════════════════════════
+# TxMTC - Telegram x MikroTik Tunnel Controller Sub-Agent
+# Monitoring Module
+# ───────────────────────────────────────────────────────────────────────────
+# GitHub: https://github.com/Danz17/Agents-smart-tools
+# Author: P̷h̷e̷n̷i̷x̷ | Crafted with love & frustration
+# ═══════════════════════════════════════════════════════════════════════════
 #
 # requires RouterOS, version=7.15
 #
@@ -119,7 +124,7 @@
   :set CheckHealthCPUUtilization (($CheckHealthCPUUtilization * 4 + $CurrentCPU) / 5);
   
   :if ($CheckHealthCPUUtilization > ($MonitorCPUThreshold * 10) && $CheckHealthCPUUtilizationNotified != true) do={
-    $SendTelegram2 ({ origin=$ScriptName; silent=false; \
+    $SendTelegram2 ({ silent=false; \
       subject="⚠️ CPU Utilization Alert"; \
       message=("CPU utilization on " . $Identity . " is high!\n\n" . \
         "Average: " . ($CheckHealthCPUUtilization / 10) . "%\n" . \
@@ -130,7 +135,7 @@
   }
   
   :if ($CheckHealthCPUUtilization < (($MonitorCPUThreshold - 10) * 10) && $CheckHealthCPUUtilizationNotified = true) do={
-    $SendTelegram2 ({ origin=$ScriptName; silent=true; \
+    $SendTelegram2 ({ silent=true; \
       subject="✅ CPU Utilization Recovered"; \
       message=("CPU utilization on " . $Identity . " returned to normal.\n\nAverage: " . ($CheckHealthCPUUtilization / 10) . "%") });
     :set CheckHealthCPUUtilizationNotified false;
@@ -147,7 +152,7 @@
   :local RAMPercent ($UsedRAM * 100 / $TotalRAM);
   
   :if ($RAMPercent >= $MonitorRAMThreshold && $CheckHealthRAMUtilizationNotified != true) do={
-    $SendTelegram2 ({ origin=$ScriptName; silent=false; \
+    $SendTelegram2 ({ silent=false; \
       subject="⚠️ RAM Utilization Alert"; \
       message=("RAM utilization on " . $Identity . " is high!\n\n" . \
         "Used: " . $RAMPercent . "%\n" . \
@@ -158,7 +163,7 @@
   }
   
   :if ($RAMPercent < ($MonitorRAMThreshold - 10) && $CheckHealthRAMUtilizationNotified = true) do={
-    $SendTelegram2 ({ origin=$ScriptName; silent=true; \
+    $SendTelegram2 ({ silent=true; \
       subject="✅ RAM Utilization Recovered"; \
       message=("RAM utilization on " . $Identity . " returned to normal.\n\nUsed: " . $RAMPercent . "%") });
     :set CheckHealthRAMUtilizationNotified false;
@@ -175,7 +180,7 @@
   :local HDDPercent ($UsedHDD * 100 / $TotalHDD);
   
   :if ($HDDPercent >= $MonitorDiskThreshold && $CheckHealthDiskUtilizationNotified != true) do={
-    $SendTelegram2 ({ origin=$ScriptName; silent=false; \
+    $SendTelegram2 ({ silent=false; \
       subject="⚠️ Disk Usage Alert"; \
       message=("Disk usage on " . $Identity . " is high!\n\n" . \
         "Used: " . $HDDPercent . "%\n" . \
@@ -186,7 +191,7 @@
   }
   
   :if ($HDDPercent < ($MonitorDiskThreshold - 10) && $CheckHealthDiskUtilizationNotified = true) do={
-    $SendTelegram2 ({ origin=$ScriptName; silent=true; \
+    $SendTelegram2 ({ silent=true; \
       subject="✅ Disk Usage Recovered"; \
       message=("Disk usage on " . $Identity . " returned to normal.\n\nUsed: " . $HDDPercent . "%") });
     :set CheckHealthDiskUtilizationNotified false;
@@ -200,7 +205,7 @@
   :onerror TempErr {
     :local TempVal [ /system/health/get value-name=temperature ];
     :if ([:typeof $TempVal] = "num" && $TempVal > $MonitorTempThreshold) do={
-      $SendTelegram2 ({ origin=$ScriptName; silent=false; \
+      $SendTelegram2 ({ silent=false; \
         subject="🌡️ Temperature Alert"; \
         message=("Temperature on " . $Identity . " is high!\n\n" . \
           "Current: " . $TempVal . "°C\nThreshold: " . $MonitorTempThreshold . "°C") });
@@ -215,7 +220,7 @@
   :onerror VoltErr {
     :local VoltageVal [ /system/health/get value-name=voltage ];
     :if ([:typeof $VoltageVal] = "num" && ($VoltageVal < $MonitorVoltageMin || $VoltageVal > $MonitorVoltageMax)) do={
-      $SendTelegram2 ({ origin=$ScriptName; silent=false; \
+      $SendTelegram2 ({ silent=false; \
         subject="⚡ Voltage Alert"; \
         message=("Voltage on " . $Identity . " is out of range!\n\n" . \
           "Current: " . $VoltageVal . "V\nExpected: " . $MonitorVoltageMin . "-" . $MonitorVoltageMax . "V") });
@@ -249,7 +254,7 @@
       :onerror IntErr {
         :local Int [ /interface/get [find name=$IntName] ];
         :if (($Int->"running") = false && ($Int->"disabled") = false) do={
-          $SendTelegram2 ({ origin=$ScriptName; silent=false; \
+          $SendTelegram2 ({ silent=false; \
             subject="🔌 Interface Down Alert"; \
             message=("Interface " . $IntName . " on " . $Identity . " is down!") });
           :log warning ($ScriptName . " - Interface down: " . $IntName);
@@ -264,12 +269,12 @@
   
   :local InternetUp false;
   :onerror PingErr {
-    :local PingResult [/ping 8.8.8.8 count=2 timeout=3s];
+    :local PingResult [:ping 8.8.8.8 count=2];
     :if ([:len $PingResult] > 0) do={ :set InternetUp true; }
   } do={ :set InternetUp false; }
   
   :if ($InternetUp = false && $CheckHealthInternetConnectivity = true) do={
-    $SendTelegram2 ({ origin=$ScriptName; silent=false; \
+    $SendTelegram2 ({ silent=false; \
       subject="🌐 Internet Connectivity Lost"; \
       message=("Router " . $Identity . " cannot reach the internet.\n\nCheck WAN interface and routing.") });
     :set CheckHealthInternetConnectivity false;
@@ -277,7 +282,7 @@
   }
   
   :if ($InternetUp = true && $CheckHealthInternetConnectivity = false) do={
-    $SendTelegram2 ({ origin=$ScriptName; silent=true; \
+    $SendTelegram2 ({ silent=true; \
       subject="✅ Internet Connectivity Restored"; \
       message=("Router " . $Identity . " internet connectivity has been restored.") });
     :set CheckHealthInternetConnectivity true;
@@ -290,7 +295,7 @@
   
   :local Uptime [ /system/resource/get uptime ];
   :if ($Uptime < 5m) do={
-    $SendTelegram2 ({ origin=$ScriptName; silent=false; \
+    $SendTelegram2 ({ silent=false; \
       subject="🔄 System Restarted"; \
       message=("Router " . $Identity . " has restarted.\n\n" . \
         "Uptime: " . $Uptime . "\nVersion: " . ($Resource->"version") . "\nBoard: " . ($Resource->"board-name")) });

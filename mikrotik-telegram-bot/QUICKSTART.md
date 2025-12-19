@@ -1,6 +1,8 @@
-# Quick Start Guide
+# TxMTC Quick Start Guide
 
-Get your MikroTik Telegram Bot up and running in 15 minutes!
+Get your **Telegram x MikroTik Tunnel Controller** up and running in 15 minutes!
+
+*by P̷h̷e̷n̷i̷x̷*
 
 ## Prerequisites Checklist
 
@@ -102,11 +104,9 @@ Run these commands in RouterOS terminal:
 
 2. **You should receive**:
    ```
-   🤖 Telegram Bot
-   
-   Hello [Your Name]!
-   
-   Online (and active!), awaiting your commands!
+   ⚡ TxMTC
+
+   Hey [Your Name]! Online & active | /help
    ```
 
 3. **Try other commands**:
@@ -117,7 +117,7 @@ Run these commands in RouterOS terminal:
 
 ## Congratulations! 🎉
 
-Your MikroTik Telegram Bot is now running!
+Your **TxMTC** is now running!
 
 ## What's Next?
 
@@ -229,7 +229,7 @@ Advanced:
 
 ---
 
-**Happy Routing!** 🚀
+**TxMTC** - *Crafted with love & frustration by* **P̷h̷e̷n̷i̷x̷**
 
 *Setup time: ~15 minutes | Complexity: Beginner-Friendly | Support: Community*
 

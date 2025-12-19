@@ -1,6 +1,11 @@
 #!rsc by RouterOS
-# MikroTik Telegram Bot - Shared Functions Module
-# https://github.com/Danz17/Agents-smart-tools/tree/main/mikrotik-telegram-bot
+# ═══════════════════════════════════════════════════════════════════════════
+# TxMTC - Telegram x MikroTik Tunnel Controller Sub-Agent
+# Shared Functions Module
+# ───────────────────────────────────────────────────────────────────────────
+# GitHub: https://github.com/Danz17/Agents-smart-tools
+# Author: P̷h̷e̷n̷i̷x̷ | Crafted with love & frustration
+# ═══════════════════════════════════════════════════════════════════════════
 #
 # requires RouterOS, version=7.15
 #
@@ -201,7 +206,7 @@
     :if ([:len [/file find name=$StateFile]] > 0) do={
       :local StateData ([/file get $StateFile contents]);
       :if ([:len $StateData] > 0) do={
-        :local Result [ :deserialize from=json value=$StateData ];
+        :local Result [ :deserialize from=json $StateData ];
         :log debug ("shared-functions - Loaded state: " . $StateName);
         :return $Result;
       }

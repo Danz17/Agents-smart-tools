@@ -1,6 +1,11 @@
 #!rsc by RouterOS
-# MikroTik Telegram Bot - Wireless Monitoring Module
-# https://github.com/Danz17/Agents-smart-tools/tree/main/mikrotik-telegram-bot
+# ═══════════════════════════════════════════════════════════════════════════
+# TxMTC - Telegram x MikroTik Tunnel Controller Sub-Agent
+# Wireless Monitoring Module
+# ───────────────────────────────────────────────────────────────────────────
+# GitHub: https://github.com/Danz17/Agents-smart-tools
+# Author: P̷h̷e̷n̷i̷x̷ | Crafted with love & frustration
+# ═══════════════════════════════════════════════════════════════════════════
 #
 # requires RouterOS, version=7.15
 # requires wireless interface
@@ -114,7 +119,7 @@
     
     # Alert if interface is down but not disabled
     :if ($WRunning = false && $WDisabled = false) do={
-      $SendTelegram2 ({ origin=$ScriptName; silent=false; \
+      $SendTelegram2 ({ silent=false; \
         subject="📡 Wireless Interface Down"; \
         message=("Wireless interface " . $WName . " on " . $Identity . " is down!") });
       :log warning ($ScriptName . " - Wireless interface down: " . $WName);
@@ -151,7 +156,7 @@
 
   # Alert on threshold
   :if ([:typeof $MonitorWirelessAlertThreshold] = "num" && $TotalClients > $MonitorWirelessAlertThreshold) do={
-    $SendTelegram2 ({ origin=$ScriptName; silent=false; \
+    $SendTelegram2 ({ silent=false; \
       subject="📡 High Wireless Client Count"; \
       message=("Wireless client count on " . $Identity . " is high!\n\n" . \
         "Total clients: " . $TotalClients . "\nThreshold: " . $MonitorWirelessAlertThreshold . $ClientDetails) });
@@ -177,7 +182,7 @@
         
         # Alert on weak signal (< -80 dBm)
         :if ([:typeof $Signal] = "num" && $Signal < -80) do={
-          $SendTelegram2 ({ origin=$ScriptName; silent=true; \
+          $SendTelegram2 ({ silent=true; \
             subject="📶 Weak Wireless Signal"; \
             message=("Client with weak signal on " . $Identity . "\n\n" . \
               "Interface: " . $WName . "\nMAC: " . $MAC . "\nSignal: " . $SignalStr) });

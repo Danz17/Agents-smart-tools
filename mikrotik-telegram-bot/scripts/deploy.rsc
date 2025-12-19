@@ -1,14 +1,20 @@
 #!rsc by RouterOS
-# MikroTik Telegram Bot - Automated Deployment Script
-# https://github.com/Danz17/Agents-smart-tools/tree/main/mikrotik-telegram-bot
+# ═══════════════════════════════════════════════════════════════════════════
+# TxMTC - Telegram x MikroTik Tunnel Controller Sub-Agent
+# Automated Deployment Script
+# ───────────────────────────────────────────────────────────────────────────
+# GitHub: https://github.com/Danz17/Agents-smart-tools
+# Author: P̷h̷e̷n̷i̷x̷ | Crafted with love & frustration
+# ═══════════════════════════════════════════════════════════════════════════
 #
 # requires RouterOS, version=7.15
 #
 # Run this script to automate installation
 
-:put "=========================================="
-:put "MikroTik Telegram Bot - Automated Deployment"
-:put "=========================================="
+:put "+===============================================================+";
+:put "|  TxMTC - Telegram x MikroTik Tunnel Controller                |";
+:put "|  Automated Deployment | by P\CC\B6h\CC\B6e\CC\B6n\CC\B6i\CC\B6x\CC\B6                             |";
+:put "+===============================================================+";
 :put ""
 
 :local ScriptName "deploy"

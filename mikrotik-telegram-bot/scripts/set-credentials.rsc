@@ -1,5 +1,12 @@
 #!rsc by RouterOS
-# MikroTik Telegram Bot - Credentials Setup
+# ═══════════════════════════════════════════════════════════════════════════
+# TxMTC - Telegram x MikroTik Tunnel Controller Sub-Agent
+# Credentials Setup
+# ───────────────────────────────────────────────────────────────────────────
+# GitHub: https://github.com/Danz17/Agents-smart-tools
+# Author: P̷h̷e̷n̷i̷x̷ | Crafted with love & frustration
+# ═══════════════════════════════════════════════════════════════════════════
+#
 # This script sets your credentials and makes them persist across reboots
 
 # ============================================================================
