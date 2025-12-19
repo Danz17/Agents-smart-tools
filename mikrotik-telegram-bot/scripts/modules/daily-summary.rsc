@@ -5,6 +5,7 @@
 # requires RouterOS, version=7.15
 #
 # Sends daily status summary via Telegram
+# Dependencies: shared-functions, telegram-api
 
 :local ExitOK false;
 :onerror Err {
@@ -13,7 +14,24 @@
       do={ :error ("Bot configuration not loaded."); }; } delay=500ms max=50;
   :local ScriptName [ :jobname ];
 
-  # Import configuration
+  # ============================================================================
+  # LOAD MODULES
+  # ============================================================================
+
+  :global SharedFunctionsLoaded;
+  :if ($SharedFunctionsLoaded != true) do={
+    :onerror ModErr { /system script run "modules/shared-functions"; } do={ }
+  }
+
+  :global TelegramAPILoaded;
+  :if ($TelegramAPILoaded != true) do={
+    :onerror ModErr { /system script run "modules/telegram-api"; } do={ }
+  }
+
+  # ============================================================================
+  # IMPORT GLOBALS
+  # ============================================================================
+
   :global Identity;
   :global TelegramTokenId;
   :global TelegramChatId;
@@ -21,6 +39,10 @@
   :global SendDailySummary;
   :global DailySummaryTime;
   :global DailySummaryLastSent;
+
+  # Imported functions
+  :global SendTelegram2;
+  :global FormatBytes;
 
   # Check if daily summary is enabled
   :if ($SendDailySummary != true) do={
@@ -49,72 +71,42 @@
     :error false;
   }
 
-  # URL encode helper
-  :local UrlEncode do={
-    :local String [ :tostr $1 ];
-    :local Result "";
-    :for I from=0 to=([:len $String] - 1) do={
-      :local Char [:pick $String $I ($I + 1)];
-      :if ($Char ~ "[A-Za-z0-9_.~-]") do={
-        :set Result ($Result . $Char);
-      } else={
-        :if ($Char = " ") do={
-          :set Result ($Result . "%20");
-        } else={
-          :if ($Char = "\n") do={
-            :set Result ($Result . "%0A");
-          } else={
-            :set Result ($Result . $Char);
-          }
+  # ============================================================================
+  # FALLBACK FUNCTIONS
+  # ============================================================================
+
+  :if ([:typeof $SendTelegram2] != "array") do={
+    :global UrlEncode;
+    :if ([:typeof $UrlEncode] != "array") do={
+      :set UrlEncode do={
+        :local String [ :tostr $1 ]; :local Result "";
+        :for I from=0 to=([:len $String] - 1) do={
+          :local Char [:pick $String $I ($I + 1)];
+          :if ($Char ~ "[A-Za-z0-9_.~-]") do={ :set Result ($Result . $Char); }
+          :if ($Char = " ") do={ :set Result ($Result . "%20"); }
+          :if ($Char = "\n") do={ :set Result ($Result . "%0A"); }
         }
+        :return $Result;
       }
     }
-    :return $Result;
-  }
-
-  # Send notification function
-  :local SendTelegram2 do={
-    :local Notification $1;
-    :global TelegramTokenId;
-    :global TelegramChatId;
-    :global TelegramThreadId;
-    :global Identity;
-    
-    :local ChatId ([$1 "chatid"]);
-    :if ([:len $ChatId] = 0) do={ :set ChatId $TelegramChatId; }
-    
-    :local ThreadId ([$1 "threadid"]);
-    :if ([:len $ThreadId] = 0) do={ :set ThreadId $TelegramThreadId; }
-    
-    :local Text ("*[" . $Identity . "] " . ($Notification->"subject") . "*\n\n" . \
-      ($Notification->"message"));
-    
-    :local HTTPData ("chat_id=" . $ChatId . \
-      "&disable_notification=" . ($Notification->"silent") . \
-      "&message_thread_id=" . $ThreadId . \
-      "&parse_mode=Markdown");
-    
-    :onerror SendErr {
-      /tool/fetch check-certificate=yes-without-crl output=none http-method=post \
-        ("https://api.telegram.org/bot" . $TelegramTokenId . "/sendMessage") \
-        http-data=($HTTPData . "&text=" . [$UrlEncode $Text]);
-    } do={
-      :log warning ("daily-summary - Failed to send notification: " . $SendErr);
+    :set SendTelegram2 do={
+      :local Notification $1;
+      :global TelegramTokenId; :global TelegramChatId; :global TelegramThreadId; :global Identity; :global UrlEncode;
+      :local ChatId ($Notification->"chatid"); :if ([:len $ChatId] = 0) do={ :set ChatId $TelegramChatId; }
+      :local ThreadId ($Notification->"threadid"); :if ([:len $ThreadId] = 0) do={ :set ThreadId $TelegramThreadId; }
+      :local Text ("*[" . $Identity . "] " . ($Notification->"subject") . "*\n\n" . ($Notification->"message"));
+      :local HTTPData ("chat_id=" . $ChatId . "&disable_notification=" . ($Notification->"silent") . "&message_thread_id=" . $ThreadId . "&parse_mode=Markdown");
+      :onerror SendErr { /tool/fetch check-certificate=yes-without-crl output=none http-method=post \
+        ("https://api.telegram.org/bot" . $TelegramTokenId . "/sendMessage") http-data=($HTTPData . "&text=" . [$UrlEncode $Text]); } do={ }
     }
   }
 
-  # Format bytes to human readable
-  :local FormatBytes do={
-    :local Bytes [:tonum $1];
-    :local Units ({"B"; "KB"; "MB"; "GB"; "TB"});
-    :local UnitIndex 0;
-    
-    :while ($Bytes >= 1024 && $UnitIndex < 4) do={
-      :set Bytes ($Bytes / 1024);
-      :set UnitIndex ($UnitIndex + 1);
+  :if ([:typeof $FormatBytes] != "array") do={
+    :set FormatBytes do={
+      :local Bytes [:tonum $1]; :local Units ({"B"; "KB"; "MB"; "GB"; "TB"}); :local UnitIndex 0;
+      :while ($Bytes >= 1024 && $UnitIndex < 4) do={ :set Bytes ($Bytes / 1024); :set UnitIndex ($UnitIndex + 1); }
+      :return ([:tostr $Bytes] . ($Units->$UnitIndex));
     }
-    
-    :return ([:tostr $Bytes] . ($Units->$UnitIndex));
   }
 
   :log info ($ScriptName . " - Generating daily summary");
@@ -137,28 +129,19 @@
   :local Version ($Resource->"version");
   :local Board ($Resource->"board-name");
 
-  # ============================================================================
-  # INTERFACE STATISTICS
-  # ============================================================================
-  
+  # Interface statistics
   :local IntTotal [:len [/interface find]];
   :local IntRunning [:len [/interface find where running=yes]];
   :local IntDisabled [:len [/interface find where disabled=yes]];
 
-  # ============================================================================
-  # NETWORK STATISTICS
-  # ============================================================================
-  
+  # Network statistics
   :local ConnCount 0;
   :onerror ConnErr { :set ConnCount [:len [/ip/firewall/connection find]]; } do={ }
   
   :local DHCPLeases 0;
   :onerror DHCPErr { :set DHCPLeases [:len [/ip/dhcp-server/lease find where status=bound]]; } do={ }
 
-  # ============================================================================
-  # WIRELESS STATISTICS (if available)
-  # ============================================================================
-  
+  # Wireless statistics
   :local WirelessClients 0;
   :local WirelessSection "";
   :onerror WirelessErr {
@@ -175,10 +158,7 @@
     }
   } do={ }
 
-  # ============================================================================
-  # SECURITY STATISTICS
-  # ============================================================================
-  
+  # Security statistics
   :local FirewallDropped 0;
   :onerror FWErr {
     :foreach Rule in=[/ip/firewall/filter find where action=drop] do={
@@ -187,10 +167,7 @@
     }
   } do={ }
 
-  # ============================================================================
-  # ERROR LOG COUNT
-  # ============================================================================
-  
+  # Log statistics
   :local ErrorCount 0;
   :local WarningCount 0;
   :onerror LogErr {
@@ -198,10 +175,7 @@
     :set WarningCount [:len [/log find where topics~"warning"]];
   } do={ }
 
-  # ============================================================================
-  # BACKUP STATUS
-  # ============================================================================
-  
+  # Backup status
   :local BackupCount 0;
   :local LastBackup "None";
   :onerror BackupErr {
@@ -217,8 +191,7 @@
   # BUILD SUMMARY MESSAGE
   # ============================================================================
   
-  :local SummaryMsg ("📊 *Daily Status Summary*\n");
-  :set SummaryMsg ($SummaryMsg . "📅 " . $Today . "\n\n");
+  :local SummaryMsg ("📊 *Daily Status Summary*\n📅 " . $Today . "\n\n");
   
   # System Health
   :set SummaryMsg ($SummaryMsg . "🖥️ *System Health:*\n");
@@ -269,10 +242,8 @@
   # ============================================================================
   
   $SendTelegram2 ({ origin=$ScriptName; silent=true; \
-    subject="📊 Daily Summary"; \
-    message=$SummaryMsg });
+    subject="📊 Daily Summary"; message=$SummaryMsg });
   
-  # Update last sent date
   :set DailySummaryLastSent $Today;
   
   :log info ($ScriptName . " - Daily summary sent successfully");

@@ -4,14 +4,13 @@
 #
 # requires RouterOS, version=7.15
 #
-# Shared helper functions used across all modules
-# Import this module to use: /import modules/shared-functions.rsc
+# Core helper functions used across all modules
+# This module exports global functions - import before using other modules
 
 # ============================================================================
 # URL ENCODING
 # ============================================================================
 
-# URL encode - improved UTF-8 handling
 :global UrlEncode do={
   :local String [ :tostr $1 ];
   :local Result "";
@@ -32,7 +31,6 @@
             :if ($Char = "\t") do={
               :set Result ($Result . "%09");
             } else={
-              # Encode special characters
               :local CharArray [:toarray $Char];
               :local FirstChar ($CharArray->0);
               :local CharCode [:tonum $FirstChar];
@@ -41,7 +39,6 @@
                 :local Hex2 [:pick "0123456789ABCDEF" ($CharCode % 16) ($CharCode % 16 + 1)];
                 :set Result ($Result . ("%" . $Hex1 . $Hex2));
               } else={
-                # Fallback for multi-byte characters (encode as-is, Telegram handles it)
                 :set Result ($Result . $Char);
               }
             }
@@ -54,10 +51,60 @@
 }
 
 # ============================================================================
-# FORMAT BYTES
+# CHARACTER REPLACE
 # ============================================================================
 
-# Format bytes to human readable
+:global CharacterReplace do={
+  :local String [ :tostr $1 ];
+  :local Find [ :tostr $2 ];
+  :local Replace [ :tostr $3 ];
+  :if ([:len $Find] = 0) do={
+    :return $String;
+  }
+  :local Result "";
+  :local Pos 0;
+  
+  :while ([:len $String] > 0) do={
+    :local NextPos [:find $String $Find $Pos];
+    :if ([:typeof $NextPos] = "nil") do={
+      :set Result ($Result . [:pick $String $Pos [:len $String]]);
+      :set String "";
+    } else={
+      :set Result ($Result . [:pick $String $Pos $NextPos] . $Replace);
+      :set Pos ($NextPos + [:len $Find]);
+    }
+  }
+  :return $Result;
+}
+
+# ============================================================================
+# ESCAPE MARKDOWN V2
+# ============================================================================
+
+:global EscapeMD do={
+  :local Text [ :tostr $1 ];
+  :local Mode [ :tostr $2 ];
+  :global CharacterReplace;
+
+  :local Chars ({ "\\"; "`"; "_"; "*"; "["; "]"; "("; ")"; "~"; ">"; "#"; "+"; "-"; "="; "|"; "{"; "}"; "."; "!" });
+  :if ($Mode = "body") do={
+    :set Chars ({ "\\"; "`" });
+  }
+  
+  :foreach Char in=$Chars do={
+    :set Text [$CharacterReplace $Text $Char ("\\" . $Char)];
+  }
+  
+  :if ($Mode = "body") do={
+    :return ("```\n" . $Text . "\n```");
+  }
+  :return $Text;
+}
+
+# ============================================================================
+# FORMAT BYTES (Human Readable)
+# ============================================================================
+
 :global FormatBytes do={
   :local Bytes [:tonum $1];
   :local Units ({"B"; "KB"; "MB"; "GB"; "TB"});
@@ -72,75 +119,146 @@
 }
 
 # ============================================================================
-# SEND TELEGRAM MESSAGE
+# FORMAT NUMBER (Human Readable with Divisor)
 # ============================================================================
 
-# Send Telegram message (standardized across modules)
-:global SendTelegram2 do={
-  :local Notification $1;
-  :global TelegramTokenId;
-  :global TelegramChatId;
-  :global TelegramThreadId;
-  :global Identity;
-  :global UrlEncode;
+:global FormatNumber do={
+  :local Num [:tonum $1];
+  :local Div [:tonum $2];
+  :local Units ({""; "K"; "M"; "G"; "T"});
+  :local UnitIndex 0;
   
-  :local ChatId ([$1 "chatid"]);
-  :if ([:len $ChatId] = 0) do={ :set ChatId $TelegramChatId; }
+  :if ([:typeof $Div] != "num" || $Div = 0) do={
+    :set Div 1000;
+  }
   
-  :local ThreadId ([$1 "threadid"]);
-  :if ([:len $ThreadId] = 0) do={ :set ThreadId $TelegramThreadId; }
+  :while ($Num >= $Div && $UnitIndex < 4) do={
+    :set Num ($Num / $Div);
+    :set UnitIndex ($UnitIndex + 1);
+  }
   
-  :local Text ("*[" . $Identity . "] " . ($Notification->"subject") . "*\n\n" . \
-    ($Notification->"message"));
-  
-  :local HTTPData ("chat_id=" . $ChatId . \
-    "&disable_notification=" . ($Notification->"silent") . \
-    "&message_thread_id=" . $ThreadId . \
-    "&parse_mode=Markdown");
-  
-  :onerror SendErr {
-    /tool/fetch check-certificate=yes-without-crl output=none http-method=post \
-      ("https://api.telegram.org/bot" . $TelegramTokenId . "/sendMessage") \
-      http-data=($HTTPData . "&text=" . [$UrlEncode $Text]);
+  :return ([:tostr $Num] . ($Units->$UnitIndex));
+}
+
+# ============================================================================
+# CERTIFICATE CHECK
+# ============================================================================
+
+:global CertificateAvailable do={
+  :local CommonName [ :tostr $1 ];
+  :if ([:len $CommonName] = 0) do={
+    :set CommonName "ISRG Root X1";
+  }
+  :if ([ :len [ /certificate find where common-name=$CommonName ] ] > 0) do={
+    :return true;
+  }
+  :return false;
+}
+
+# ============================================================================
+# VALIDATE SYNTAX
+# ============================================================================
+
+:global ValidateSyntax do={
+  :local Code [ :tostr $1 ];
+  :onerror SyntaxErr {
+    :parse $Code;
+    :return true;
   } do={
-    :log warning ("shared-functions - Failed to send notification: " . $SendErr);
+    :return false;
   }
 }
 
 # ============================================================================
-# STATE PERSISTENCE
+# STATE PERSISTENCE - SAVE
 # ============================================================================
 
-# Save state to file
-:global SaveState do={
+:global SaveBotState do={
   :local StateName [ :tostr $1 ];
-  :local StateData [ :tostr $2 ];
+  :local StateData $2;
   :local StateFile ("tmpfs/bot-state-" . $StateName . ".txt");
   
   :onerror SaveErr {
-    /file/print file=$StateFile to=$StateData;
+    :local JSON [ :serialize to=json value=$StateData ];
+    /file/add name=$StateFile contents=$JSON;
     :log debug ("shared-functions - Saved state: " . $StateName);
+    :return true;
   } do={
     :log warning ("shared-functions - Failed to save state " . $StateName . ": " . $SaveErr);
+    :return false;
   }
 }
 
-# Load state from file
-:global LoadState do={
+# ============================================================================
+# STATE PERSISTENCE - LOAD
+# ============================================================================
+
+:global LoadBotState do={
   :local StateName [ :tostr $1 ];
   :local StateFile ("tmpfs/bot-state-" . $StateName . ".txt");
-  :local StateData "";
   
   :onerror LoadErr {
     :if ([:len [/file find name=$StateFile]] > 0) do={
-      :set StateData ([/file get $StateFile contents]);
-      :log debug ("shared-functions - Loaded state: " . $StateName);
+      :local StateData ([/file get $StateFile contents]);
+      :if ([:len $StateData] > 0) do={
+        :local Result [ :deserialize from=json value=$StateData ];
+        :log debug ("shared-functions - Loaded state: " . $StateName);
+        :return $Result;
+      }
     }
   } do={
     :log debug ("shared-functions - State file not found: " . $StateName);
   }
-  
-  :return $StateData;
+  :return;
 }
 
+# ============================================================================
+# PARSE COMMA-SEPARATED LIST
+# ============================================================================
+
+:global ParseCSV do={
+  :local Input [ :tostr $1 ];
+  :local Result ({});
+  :local Current "";
+  
+  :for I from=0 to=([:len $Input] - 1) do={
+    :local Char [:pick $Input $I ($I + 1)];
+    :if ($Char = ",") do={
+      :local Trimmed $Current;
+      # Trim whitespace
+      :while ([:len $Trimmed] > 0 && [:pick $Trimmed 0 1] = " ") do={
+        :set Trimmed [:pick $Trimmed 1 [:len $Trimmed]];
+      }
+      :while ([:len $Trimmed] > 0 && [:pick $Trimmed ([:len $Trimmed] - 1) [:len $Trimmed]] = " ") do={
+        :set Trimmed [:pick $Trimmed 0 ([:len $Trimmed] - 1)];
+      }
+      :if ([:len $Trimmed] > 0) do={
+        :set ($Result->[:len $Result]) $Trimmed;
+      }
+      :set Current "";
+    } else={
+      :set Current ($Current . $Char);
+    }
+  }
+  
+  # Don't forget the last item
+  :local Trimmed $Current;
+  :while ([:len $Trimmed] > 0 && [:pick $Trimmed 0 1] = " ") do={
+    :set Trimmed [:pick $Trimmed 1 [:len $Trimmed]];
+  }
+  :while ([:len $Trimmed] > 0 && [:pick $Trimmed ([:len $Trimmed] - 1) [:len $Trimmed]] = " ") do={
+    :set Trimmed [:pick $Trimmed 0 ([:len $Trimmed] - 1)];
+  }
+  :if ([:len $Trimmed] > 0) do={
+    :set ($Result->[:len $Result]) $Trimmed;
+  }
+  
+  :return $Result;
+}
+
+# ============================================================================
+# INITIALIZATION FLAG
+# ============================================================================
+
+:global SharedFunctionsLoaded true;
 :log info "Shared functions module loaded"

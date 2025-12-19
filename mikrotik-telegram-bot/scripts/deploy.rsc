@@ -65,7 +65,6 @@
   :put "  ✓ Certificate already installed"
 } else={
   :local CertInstalled false
-  # Try multiple certificate sources
   :onerror CertErr1 {
     /tool fetch url="https://letsencrypt.org/certs/isrgrootx1.pem" \
       mode=https dst-path=telegram-cert.pem
@@ -96,11 +95,15 @@
 
 :put "[Step 3/8] Creating scripts..."
 
+# Script list with proper module paths
 :local Scripts ({
   "bot-config";
   "bot-core";
   "verify-installation";
   "troubleshoot";
+  "modules/shared-functions";
+  "modules/telegram-api";
+  "modules/security";
   "modules/monitoring";
   "modules/backup";
   "modules/custom-commands";
@@ -113,15 +116,12 @@
 :foreach Script in=$Scripts do={
   :local FileName ($Script . ".rsc")
   
-  # Support both directory uploads (e.g. "modules/monitoring.rsc") and flat uploads
-  # (e.g. "monitoring.rsc" in the root file store).
+  # Try multiple file locations
   :local FoundFile ""
   
-  # Try the exact filename first
   :if ([:len [/file find where name=$FileName]] > 0) do={
     :set FoundFile $FileName
   } else={
-    # For modules, try the base name without the directory prefix
     :if ($Script ~ "^modules/") do={
       :local BaseName ([:pick $Script 8 [:len $Script]] . ".rsc")
       :if ([:len [/file find where name=$BaseName]] > 0) do={
@@ -150,7 +150,6 @@
     }
   } else={
     :put ("  ⚠ File not found for script: " . $Script)
-    :put ("    Expected: " . $FileName)
   }
 }
 
@@ -174,7 +173,6 @@
       :put "  ✓ Configuration loaded (ran script bot-config)"
     } else={
       :put "  ⚠ bot-config.rsc not found and script bot-config missing"
-      :put "    Please upload and configure bot-config.rsc"
     }
   }
 } do={
@@ -182,10 +180,31 @@
 }
 
 # ============================================================================
-# STEP 5: VERIFY CONFIGURATION
+# STEP 5: LOAD MODULES
 # ============================================================================
 
-:put "[Step 5/8] Verifying configuration..."
+:put "[Step 5/8] Loading modules..."
+
+:local Modules ({
+  "modules/shared-functions";
+  "modules/telegram-api";
+  "modules/security"
+})
+
+:foreach Module in=$Modules do={
+  :onerror ModErr {
+    /system script run $Module
+    :put ("  ✓ Loaded: " . $Module)
+  } do={
+    :put ("  ⚠ Failed to load module: " . $Module)
+  }
+}
+
+# ============================================================================
+# STEP 6: VERIFY CONFIGURATION
+# ============================================================================
+
+:put "[Step 6/8] Verifying configuration..."
 
 :global TelegramTokenId
 :global TelegramChatId
@@ -209,10 +228,10 @@
 }
 
 # ============================================================================
-# STEP 6: CREATE SCHEDULERS
+# STEP 7: CREATE SCHEDULERS
 # ============================================================================
 
-:put "[Step 6/8] Creating schedulers..."
+:put "[Step 7/8] Creating schedulers..."
 
 # Bot polling scheduler
 :if ([:len [/system scheduler find where name="telegram-bot"]] = 0) do={
@@ -272,38 +291,28 @@
 }
 
 # ============================================================================
-# STEP 7: TEST CONNECTIVITY
+# STEP 8: TEST AND START
 # ============================================================================
 
-:put "[Step 7/8] Testing connectivity..."
+:put "[Step 8/8] Testing connectivity and starting bot..."
 
-# Test with actual bot token if configured
 :if ($TelegramTokenId != "YOUR_BOT_TOKEN_HERE" && [:len $TelegramTokenId] > 20) do={
   :onerror ConnErr {
     :local Result [/tool fetch url=("https://api.telegram.org/bot" . $TelegramTokenId . "/getMe") \
       mode=https output=user as-value]
-    :put "  ✓ Telegram API reachable (bot token valid)"
+    :put "  ✓ Telegram API reachable"
   } do={
     :put ("  ⚠ Telegram API test failed: " . $ConnErr)
-    :put "    Bot may still work - check token and try manually"
   }
 } else={
-  # Just test basic HTTPS connectivity
   :onerror ConnErr {
     /tool fetch url="https://www.google.com" mode=https output=none
-    :put "  ✓ Internet connectivity OK (configure token to test Telegram)"
+    :put "  ✓ Internet connectivity OK"
   } do={
     :put ("  ✗ No internet connectivity: " . $ConnErr)
-    :put "    Check internet connection and firewall"
     :set DeploymentFailed true
   }
 }
-
-# ============================================================================
-# STEP 8: INITIAL BOT RUN
-# ============================================================================
-
-:put "[Step 8/8] Starting bot..."
 
 :if ($DeploymentFailed = false) do={
   :onerror BotErr {
@@ -311,7 +320,6 @@
     :put "  ✓ Bot started successfully"
   } do={
     :put ("  ⚠ Bot start encountered issues: " . $BotErr)
-    :put "    Check logs: /log print where topics~\"script\""
   }
 } else={
   :put "  ⊘ Skipped due to previous errors"
@@ -334,8 +342,17 @@
   :put "3. Try '/help' to see available commands"
   :put "4. Try '/status' to check system status"
   :put ""
-  :put "To verify installation:"
-  :put "/system script run verify-installation"
+  :put "Module Structure:"
+  :put "• bot-config         - Configuration"
+  :put "• bot-core           - Main polling loop"
+  :put "• modules/shared-functions - Shared helpers"
+  :put "• modules/telegram-api     - Telegram API"
+  :put "• modules/security         - Rate limiting/auth"
+  :put "• modules/monitoring       - System health"
+  :put "• modules/backup           - Automated backups"
+  :put "• modules/custom-commands  - Command handlers"
+  :put "• modules/daily-summary    - Daily reports"
+  :put "• modules/wireless-monitoring - WiFi monitoring"
   :put ""
   :put "For troubleshooting:"
   :put "/system script run troubleshoot"
@@ -346,11 +363,6 @@
   :put "1. Review errors above"
   :put "2. Fix configuration issues"
   :put "3. Run deployment again"
-  :put ""
-  :put "For help:"
-  :put "• Check installation guide"
-  :put "• Run: /system script run troubleshoot"
-  :put "• Review logs: /log print where topics~\"script\""
 }
 :put "=========================================="
 :put ""

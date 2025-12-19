@@ -13,15 +13,19 @@
 :put "==========================================";
 :put "";
 
-# Script list: name and file path
+# Script list: name and file path (order matters - core modules first!)
 :local ScriptList {
   "bot-config"="bot-config.rsc";
+  "modules/shared-functions"="modules/shared-functions.rsc";
+  "modules/telegram-api"="modules/telegram-api.rsc";
+  "modules/security"="modules/security.rsc";
   "bot-core"="bot-core.rsc";
   "modules/backup"="modules/backup.rsc";
   "modules/monitoring"="modules/monitoring.rsc";
   "modules/custom-commands"="modules/custom-commands.rsc";
   "modules/wireless-monitoring"="modules/wireless-monitoring.rsc";
-  "modules/daily-summary"="modules/daily-summary.rsc"
+  "modules/daily-summary"="modules/daily-summary.rsc";
+  "set-credentials"="set-credentials.rsc"
 };
 
 :local UpdateCount 0;

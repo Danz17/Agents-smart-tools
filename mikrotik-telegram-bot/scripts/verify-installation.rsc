@@ -66,7 +66,7 @@
 # ============================================================================
 
 :put "[ 3/10] Checking installed scripts..."
-:local RequiredScripts ({"bot-core"; "modules/monitoring"; "modules/backup"; "modules/custom-commands"; "modules/wireless-monitoring"; "modules/daily-summary"})
+:local RequiredScripts ({"bot-config"; "bot-core"; "modules/shared-functions"; "modules/telegram-api"; "modules/security"; "modules/monitoring"; "modules/backup"; "modules/custom-commands"; "modules/wireless-monitoring"; "modules/daily-summary"})
 :local ScriptsOK 0
 
 :foreach Script in=$RequiredScripts do={
@@ -109,11 +109,12 @@
 # ============================================================================
 
 :put "[ 5/10] Checking SSL certificate..."
-:if ([:len [/certificate find where common-name~"Go Daddy"]] > 0) do={
+:if ([:len [/certificate find where common-name~"ISRG"]] > 0 || \
+    [:len [/certificate find where common-name~"Go Daddy"]] > 0 || \
+    [:len [/certificate find where common-name~"DigiCert"]] > 0) do={
   :put "        ✓ SSL certificate installed"
 } else={
-  :put "        ✗ SSL certificate missing (Telegram API won't work)"
-  :set AllOK false
+  :put "        ⚠ SSL certificate missing (will use check-certificate=no)"
 }
 
 # ============================================================================

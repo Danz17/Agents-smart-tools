@@ -5,8 +5,8 @@
 # requires RouterOS, version=7.15
 # requires device-mode, fetch
 #
-# Enhanced Telegram bot with command execution and notifications
-# Combines telegram-chat and notification-telegram functionality
+# Main bot loop - polls Telegram and processes commands
+# Dependencies: bot-config, modules/shared-functions, modules/telegram-api, modules/security
 
 :local ExitOK false;
 :onerror Err {
@@ -15,7 +15,39 @@
       do={ :error ("Bot configuration not loaded. Run bot-config first."); }; } delay=500ms max=50;
   :local ScriptName [ :jobname ];
 
-  # Import configuration variables
+  # ============================================================================
+  # LOAD MODULES
+  # ============================================================================
+
+  # Import shared functions module
+  :global SharedFunctionsLoaded;
+  :if ($SharedFunctionsLoaded != true) do={
+    :onerror ModErr { /system script run "modules/shared-functions"; } do={
+      :log warning ($ScriptName . " - Could not load shared-functions module");
+    }
+  }
+
+  # Import telegram-api module
+  :global TelegramAPILoaded;
+  :if ($TelegramAPILoaded != true) do={
+    :onerror ModErr { /system script run "modules/telegram-api"; } do={
+      :log warning ($ScriptName . " - Could not load telegram-api module");
+    }
+  }
+
+  # Import security module
+  :global SecurityModuleLoaded;
+  :if ($SecurityModuleLoaded != true) do={
+    :onerror ModErr { /system script run "modules/security"; } do={
+      :log warning ($ScriptName . " - Could not load security module");
+    }
+  }
+
+  # ============================================================================
+  # IMPORT GLOBALS
+  # ============================================================================
+
+  # Configuration variables
   :global Identity;
   :global IdentityExtra;
   :global TelegramChatActive;
@@ -31,460 +63,39 @@
   :global TelegramQueue;
   :global CustomCommands;
   :global CommandRateLimit;
-  :global RequireConfirmation;
-  :global ConfirmationRequired;
   :global LogAllCommands;
   :global NotifyUntrustedAttempts;
-  :global EnableCommandWhitelist;
-  :global CommandWhitelist;
-  :global MaxFailedAttempts;
   :global BlockDuration;
   
-  # Runtime state variables
-  :global CommandRateLimitTracker;
-  :global PendingConfirmations;
-  :global BlockedUsers;
+  # Imported functions from modules
+  :global SendTelegram2;
+  :global FetchTelegramUpdates;
+  :global CertificateAvailable;
+  :global ValidateSyntax;
+  :global CheckRateLimit;
+  :global CheckWhitelist;
+  :global RequiresConfirmation;
+  :global StorePendingConfirmation;
+  :global CheckConfirmation;
+  :global IsUserBlocked;
+  :global RecordFailedAttempt;
+  :global IsUserTrusted;
+  :global IsDangerousCommand;
+  :global ProcessCustomCommand;
 
   # ============================================================================
-  # HELPER FUNCTIONS
-  # ============================================================================
-
-  # Certificate check - verify ISRG Root X1 is installed
-  :local CertificateAvailable do={
-    :local CommonName [ :tostr $1 ];
-    :if ([ :len [ /certificate find where common-name=$CommonName ] ] > 0) do={
-      :return true;
-    }
-    :return false;
-  }
-
-  # Escape markdown v2 special characters
-  :local EscapeMD do={
-    :local Text [ :tostr $1 ];
-    :local Mode [ :tostr $2 ];
-    
-    :local CharacterReplace do={
-      :local String [ :tostr $1 ];
-      :local Find [ :tostr $2 ];
-      :local Replace [ :tostr $3 ];
-      :if ([:len $Find] = 0) do={
-        :return $String;
-      }
-      :local Result "";
-      :local Pos 0;
-      
-      :while ([:len $String] > 0) do={
-        :local NextPos [:find $String $Find $Pos];
-        :if ([:typeof $NextPos] = "nil") do={
-          :set Result ($Result . [:pick $String $Pos [:len $String]]);
-          :set String "";
-        } else={
-          :set Result ($Result . [:pick $String $Pos $NextPos] . $Replace);
-          :set Pos ($NextPos + [:len $Find]);
-        }
-      }
-      :return $Result;
-    }
-
-    :local Chars ({ "\\"; "`"; "_"; "*"; "["; "]"; "("; ")"; "~"; ">"; "#"; "+"; "-"; "="; "|"; "{"; "}"; "."; "!" });
-    :if ($Mode = "body") do={
-      :set Chars ({ "\\"; "`" });
-    }
-    
-    :foreach Char in=$Chars do={
-      :set Text [$CharacterReplace $Text $Char ("\\" . $Char)];
-    }
-    
-    :if ($Mode = "body") do={
-      :return ("```\n" . $Text . "\n```");
-    }
-    :return $Text;
-  }
-
-  # URL encode
-  :local UrlEncode do={
-    :local String [ :tostr $1 ];
-    :local Result "";
-    :for I from=0 to=([:len $String] - 1) do={
-      :local Char [:pick $String $I ($I + 1)];
-      :if ($Char ~ "[A-Za-z0-9_.~-]") do={
-        :set Result ($Result . $Char);
-      } else={
-        :local CharArray [:toarray $Char];
-        :local FirstChar ($CharArray->0);
-        :local CharCode [:tonum $FirstChar];
-        :if ([:typeof $CharCode] = "num") do={
-          :set Result ($Result . ("%" . [:pick "0123456789ABCDEF" ($CharCode / 16) ($CharCode / 16 + 1)] . \
-            [:pick "0123456789ABCDEF" ($CharCode % 16) ($CharCode % 16 + 1)]));
-        } else={
-          :set Result ($Result . $Char);
-        }
-      }
-    }
-    :return $Result;
-  }
-
-  # Dangerous commands that should be blocked
-  :local DangerousCommands ({
-    "/system reset-configuration";
-    "/system reset-configuration no-defaults=yes";
-    "/system reset-configuration keep-users=yes";
-    "/system reset-configuration skip-backup=yes";
-    "/file remove *";
-    "/file remove all";
-  });
-  
-  # Check if command is dangerous and should be blocked
-  :local IsDangerousCommand do={
-    :local Command [ :tostr $1 ];
-    :local CommandUpper [:toupper $Command];
-    :foreach DangerousCmd in=$DangerousCommands do={
-      :local DangerousUpper [:toupper $DangerousCmd];
-      :if ($CommandUpper ~ ("^" . $DangerousUpper)) do={
-        :return true;
-      }
-    }
-    :return false;
-  }
-
-  # Validate syntax - returns true if valid, false if invalid
-  :local ValidateSyntax do={
-    :local Code [ :tostr $1 ];
-    :onerror SyntaxErr {
-      :parse $Code;
-      :return true;
-    } do={
-      :return false;
-    }
-  }
-
-  # Send Telegram message
-  :local SendTelegram2 do={
-    :local Notification $1;
-    
-    :global TelegramTokenId;
-    :global TelegramChatId;
-    :global TelegramThreadId;
-    :global TelegramMessageIDs;
-    :global TelegramQueue;
-    :global Identity;
-    :global IdentityExtra;
-    
-    :local ChatId ([$1 "chatid"]);
-    :if ([:len $ChatId] = 0) do={ :set ChatId $TelegramChatId; }
-    
-    :local ThreadId ([$1 "threadid"]);
-    :if ([:len $ThreadId] = 0) do={ :set ThreadId $TelegramThreadId; }
-    
-    :if ([:typeof $TelegramMessageIDs] = "nothing") do={
-      :set TelegramMessageIDs ({});
-    }
-    
-    :local Subject [:tostr ($Notification->"subject")];
-    :local Msg [:tostr ($Notification->"message")];
-    :local IdentStr [:tostr $Identity];
-    :if ([:typeof $IdentityExtra] = "str") do={
-      :set IdentStr ($IdentityExtra . $IdentStr);
-    }
-    :local Text ("[" . $IdentStr . "] " . $Subject . "\n\n" . $Msg);
-    
-    :local HTTPData ("chat_id=" . $ChatId . "&disable_notification=" . \
-      ($Notification->"silent") . "&reply_to_message_id=" . ($Notification->"replyto") . \
-      "&message_thread_id=" . $ThreadId . "&disable_web_page_preview=true");
-    
-    :onerror SendErr {
-      :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
-        :log warning ($ScriptName . " - Certificate not found, using check-certificate=no");
-        :local Data ([ /tool/fetch check-certificate=no output=user http-method=post \
-          ("https://api.telegram.org/bot" . $TelegramTokenId . "/sendMessage") \
-          http-data=($HTTPData . "&text=" . [$UrlEncode $Text]) as-value ]->"data");
-        :set ($TelegramMessageIDs->[ :tostr ([ :deserialize from=json value=$Data ]->"result"->"message_id") ]) 1;
-      } else={
-        :local Data ([ /tool/fetch check-certificate=yes-without-crl output=user http-method=post \
-          ("https://api.telegram.org/bot" . $TelegramTokenId . "/sendMessage") \
-          http-data=($HTTPData . "&text=" . [$UrlEncode $Text]) as-value ]->"data");
-        :set ($TelegramMessageIDs->[ :tostr ([ :deserialize from=json value=$Data ]->"result"->"message_id") ]) 1;
-      }
-    } do={
-      :log info ($ScriptName . " - Message queued: " . $SendErr);
-      :if ([:typeof $TelegramQueue] = "nothing") do={
-        :set TelegramQueue ({});
-      }
-      :set ($TelegramQueue->[:len $TelegramQueue]) { tokenid=$TelegramTokenId;
-        http-data=($HTTPData . "&text=" . [$UrlEncode $Text]) };
-    }
-  }
-
-  # Get Telegram Chat ID helper
-  :local GetTelegramChatId do={
-    :global TelegramTokenId;
-    
-    :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
-      :log warning "Certificate ISRG Root X1 not found, using check-certificate=no";
-    }
-    
-    :local Data;
-    :onerror FetchErr {
-      :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
-        :set Data ([ /tool/fetch check-certificate=no output=user \
-          ("https://api.telegram.org/bot" . $TelegramTokenId . "/getUpdates?offset=0" . \
-          "&allowed_updates=%5B%22message%22%5D") as-value ]->"data");
-      } else={
-        :set Data ([ /tool/fetch check-certificate=yes-without-crl output=user \
-          ("https://api.telegram.org/bot" . $TelegramTokenId . "/getUpdates?offset=0" . \
-          "&allowed_updates=%5B%22message%22%5D") as-value ]->"data");
-      }
-    } do={
-      :log warning ("Fetching data failed: " . $FetchErr);
-      :return false;
-    }
-    
-    :local JSON [ :deserialize from=json value=$Data ];
-    :local Count [ :len ($JSON->"result") ];
-    
-    :if ($Count = 0) do={
-      :log info "No message received.";
-      :return false;
-    }
-    
-    :local Message ($JSON->"result"->($Count - 1)->"message");
-    :log info ("The chat id is: " . ($Message->"chat"->"id"));
-    :if (($Message->"is_topic_message") = true) do={
-      :log info ("The thread id is: " . ($Message->"message_thread_id"));
-    }
-  }
-
-  # Process custom command aliases
-  :local ProcessCustomCommand do={
-    :local Command [ :tostr $1 ];
-    :global CustomCommands;
-    
-    # Check if command starts with /
-    :if ([:pick $Command 0 1] = "/") do={
-      :local CmdName [:pick $Command 1 [:len $Command]];
-      :local CmdParts [:toarray $CmdName];
-      :local BaseCmd [:tolower [:pick $CmdParts 0]];
-      
-      :if ([:typeof ($CustomCommands->$BaseCmd)] != "nothing") do={
-        :return ($CustomCommands->$BaseCmd);
-      }
-    }
-    :return $Command;
-  }
-
-  # ============================================================================
-  # RATE LIMITING
-  # ============================================================================
-  
-  :local CheckRateLimit do={
-    :local UserId [ :tostr $1 ];
-    :global CommandRateLimit;
-    :global CommandRateLimitTracker;
-    
-    # Initialize tracker if needed
-    :if ([:typeof $CommandRateLimitTracker] != "array") do={
-      :set CommandRateLimitTracker ({});
-    }
-    
-    :local CurrentTime [:timestamp];
-    :local UserKey ("user_" . $UserId);
-    :local UserData ($CommandRateLimitTracker->$UserKey);
-    
-    # Clean up old entries (older than 1 minute)
-    :if ([:typeof $UserData] = "array") do={
-      :local LastTime ($UserData->"time");
-      :local TimeDiff ($CurrentTime - $LastTime);
-      :if ($TimeDiff > 60s) do={
-        :set ($CommandRateLimitTracker->$UserKey) ({count=1; time=$CurrentTime});
-        :return true;
-      }
-      
-      :local Count ($UserData->"count");
-      :if ($Count >= $CommandRateLimit) do={
-        :return false;
-      }
-      
-      :set ($CommandRateLimitTracker->$UserKey) ({count=($Count + 1); time=($UserData->"time")});
-      :return true;
-    }
-    
-    # First command from this user
-    :set ($CommandRateLimitTracker->$UserKey) ({count=1; time=$CurrentTime});
-    :return true;
-  }
-
-  # ============================================================================
-  # COMMAND WHITELIST CHECK
-  # ============================================================================
-  
-  :local CheckWhitelist do={
-    :local Command [ :tostr $1 ];
-    :global EnableCommandWhitelist;
-    :global CommandWhitelist;
-    
-    # If whitelist is disabled, allow all
-    :if ($EnableCommandWhitelist != true) do={
-      :return true;
-    }
-    
-    # Check if command matches any whitelisted command
-    :foreach AllowedCmd in=$CommandWhitelist do={
-      :if ($Command ~ ("^" . $AllowedCmd)) do={
-        :return true;
-      }
-    }
-    
-    :return false;
-  }
-
-  # ============================================================================
-  # CONFIRMATION FLOW
-  # ============================================================================
-  
-  :local RequiresConfirmation do={
-    :local Command [ :tostr $1 ];
-    :global RequireConfirmation;
-    :global ConfirmationRequired;
-    
-    :if ($RequireConfirmation != true) do={
-      :return false;
-    }
-    
-    :foreach DangerousCmd in=$ConfirmationRequired do={
-      :if ($Command ~ $DangerousCmd) do={
-        :return true;
-      }
-    }
-    
-    :return false;
-  }
-  
-  :local StorePendingConfirmation do={
-    :local UserId [ :tostr $1 ];
-    :local Command [ :tostr $2 ];
-    :local MsgId [ :tostr $3 ];
-    :global PendingConfirmations;
-    
-    :if ([:typeof $PendingConfirmations] != "array") do={
-      :set PendingConfirmations ({});
-    }
-    
-    :local ConfirmCode [:rndstr length=6 from="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"];
-    :local UserKey ("user_" . $UserId);
-    :set ($PendingConfirmations->$UserKey) ({
-      command=$Command;
-      code=$ConfirmCode;
-      msgid=$MsgId;
-      time=[:timestamp]
-    });
-    
-    :return $ConfirmCode;
-  }
-  
-  :local CheckConfirmation do={
-    :local UserId [ :tostr $1 ];
-    :local InputCode [ :tostr $2 ];
-    :global PendingConfirmations;
-    
-    :if ([:typeof $PendingConfirmations] != "array") do={
-      :return "";
-    }
-    
-    :local UserKey ("user_" . $UserId);
-    :local Pending ($PendingConfirmations->$UserKey);
-    
-    :if ([:typeof $Pending] != "array") do={
-      :return "";
-    }
-    
-    # Check if confirmation is still valid (5 minute timeout)
-    :local PendingTime ($Pending->"time");
-    :local TimeDiff ([:timestamp] - $PendingTime);
-    :if ($TimeDiff > 5m) do={
-      :set ($PendingConfirmations->$UserKey) "";
-      :return "";
-    }
-    
-    # Check confirmation code
-    :if (($Pending->"code") = $InputCode) do={
-      :local ConfirmedCmd ($Pending->"command");
-      :set ($PendingConfirmations->$UserKey) "";
-      :return $ConfirmedCmd;
-    }
-    
-    :return "";
-  }
-
-  # ============================================================================
-  # USER BLOCKING
-  # ============================================================================
-  
-  :local IsUserBlocked do={
-    :local UserId [ :tostr $1 ];
-    :global BlockedUsers;
-    :global BlockDuration;
-    
-    :if ([:typeof $BlockedUsers] != "array") do={
-      :return false;
-    }
-    
-    :local UserKey ("user_" . $UserId);
-    :local BlockData ($BlockedUsers->$UserKey);
-    
-    :if ([:typeof $BlockData] != "array") do={
-      :return false;
-    }
-    
-    :local BlockTime ($BlockData->"time");
-    :local TimeDiff ([:timestamp] - $BlockTime);
-    :local BlockDur ([:tonum $BlockDuration] * 60s);
-    
-    :if ($TimeDiff > $BlockDur) do={
-      :set ($BlockedUsers->$UserKey) "";
-      :return false;
-    }
-    
-    :return true;
-  }
-  
-  :local RecordFailedAttempt do={
-    :local UserId [ :tostr $1 ];
-    :global BlockedUsers;
-    :global MaxFailedAttempts;
-    
-    :if ([:typeof $BlockedUsers] != "array") do={
-      :set BlockedUsers ({});
-    }
-    
-    :local UserKey ("user_" . $UserId);
-    :local FailKey ("fails_" . $UserId);
-    :local Fails ($BlockedUsers->$FailKey);
-    
-    :if ([:typeof $Fails] != "num") do={
-      :set Fails 0;
-    }
-    
-    :set Fails ($Fails + 1);
-    :set ($BlockedUsers->$FailKey) $Fails;
-    
-    :if ($Fails >= $MaxFailedAttempts) do={
-      :set ($BlockedUsers->$UserKey) ({time=[:timestamp]});
-      :set ($BlockedUsers->$FailKey) 0;
-      :return true;
-    }
-    
-    :return false;
-  }
-
-  # ============================================================================
-  # MAIN BOT LOGIC
+  # VALIDATE CONFIGURATION
   # ============================================================================
 
   :if ([:len $TelegramTokenId] = 0 || $TelegramTokenId = "YOUR_BOT_TOKEN_HERE") do={
-    :log error "TelegramTokenId not configured!";
+    :log error ($ScriptName . " - TelegramTokenId not configured!");
     :set ExitOK true;
     :error false;
   }
+
+  # ============================================================================
+  # INITIALIZE STATE
+  # ============================================================================
 
   :if ([:typeof $TelegramChatOffset] != "array") do={
     :set TelegramChatOffset { 0; 0; 0 };
@@ -492,8 +103,11 @@
   :if ([:typeof $TelegramRandomDelay] != "num") do={
     :set TelegramRandomDelay 0;
   }
-  
-  # Load persisted state on startup (if available)
+  :if ([:typeof $TelegramMessageIDs] = "nothing") do={
+    :set TelegramMessageIDs ({});
+  }
+
+  # Load persisted state on startup
   :local StateFile "tmpfs/bot-state-runtime.txt";
   :onerror LoadStateErr {
     :if ([:len [/file find name=$StateFile]] > 0) do={
@@ -503,12 +117,6 @@
         :if ([:typeof ($StateJSON->"offset")] = "array") do={
           :set TelegramChatOffset ($StateJSON->"offset");
         }
-        :if ([:typeof ($StateJSON->"blocked")] = "array") do={
-          :set BlockedUsers ($StateJSON->"blocked");
-        }
-        :if ([:typeof ($StateJSON->"pending")] = "array") do={
-          :set PendingConfirmations ($StateJSON->"pending");
-        }
         :log debug ($ScriptName . " - Loaded persisted state");
       }
     }
@@ -516,64 +124,63 @@
     :log debug ($ScriptName . " - No persisted state found (first run)");
   }
 
-  :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
-    :log warning ($ScriptName . " - Certificate ISRG Root X1 not found, continuing with check-certificate=no");
-  }
+  # ============================================================================
+  # RANDOM DELAY (prevent simultaneous polling)
+  # ============================================================================
 
-  # Random delay to prevent simultaneous polling
   :if ($TelegramRandomDelay > 0) do={
     :local RndDelay [:rndnum from=0 to=$TelegramRandomDelay];
     :delay ($RndDelay . "s");
   }
 
-  # Fetch updates from Telegram
-  :local Data false;
-  :for I from=1 to=4 do={
-    :if ($Data = false) do={
-      :onerror FetchErr {
-        :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
-          :set Data ([ /tool/fetch check-certificate=no output=user \
-            ("https://api.telegram.org/bot" . $TelegramTokenId . "/getUpdates?offset=" . \
-            $TelegramChatOffset->0 . "&allowed_updates=%5B%22message%22%5D") as-value ]->"data");
-        } else={
+  # ============================================================================
+  # FETCH UPDATES FROM TELEGRAM
+  # ============================================================================
+
+  :local JSON;
+  :if ([:typeof $FetchTelegramUpdates] = "array") do={
+    :set JSON [$FetchTelegramUpdates];
+  } else={
+    # Fallback if module not loaded
+    :local Data false;
+    :for I from=1 to=4 do={
+      :if ($Data = false) do={
+        :onerror FetchErr {
           :set Data ([ /tool/fetch check-certificate=yes-without-crl output=user \
             ("https://api.telegram.org/bot" . $TelegramTokenId . "/getUpdates?offset=" . \
             $TelegramChatOffset->0 . "&allowed_updates=%5B%22message%22%5D") as-value ]->"data");
-        }
-        :set TelegramRandomDelay ([:tonum $TelegramRandomDelay] - 1);
-        :if ($TelegramRandomDelay < 0) do={ :set TelegramRandomDelay 0; }
-      } do={
-        :if ($I < 4) do={
-          :log debug ($ScriptName . " - Fetch failed, " . $I . ". try: " . $FetchErr);
-          :set TelegramRandomDelay ([:tonum $TelegramRandomDelay] + 5);
-          :if ($TelegramRandomDelay > 15) do={ :set TelegramRandomDelay 15; }
-          :delay (($I * $I) . "s");
+        } do={
+          :if ($I < 4) do={ :delay (($I * $I) . "s"); }
         }
       }
     }
+    :if ($Data != false) do={
+      :set JSON [ :deserialize from=json value=$Data ];
+    }
   }
 
-  :if ($Data = false) do={
+  :if ([:typeof $JSON] = "nothing") do={
     :log warning ($ScriptName . " - Failed getting updates");
     :set ExitOK true;
     :error false;
   }
 
-  # Process updates
-  :local JSON [ :deserialize from=json value=$Data ];
+  # ============================================================================
+  # PROCESS UPDATES
+  # ============================================================================
+
   :local UpdateID 0;
   :local Uptime [ /system/resource/get uptime ];
   
   :foreach Update in=($JSON->"result") do={
     :set UpdateID ($Update->"update_id");
-    :log debug ($ScriptName . " - Update " . $UpdateID);
+    :log debug ($ScriptName . " - Processing update " . $UpdateID);
 
     :local Message ($Update->"message");
     :local IsAnyReply ([:typeof ($Message->"reply_to_message")] = "array");
     :local IsMyReply ($TelegramMessageIDs->[:tostr ($Message->"reply_to_message"->"message_id")]);
     
     :if (($IsMyReply = 1 || $TelegramChatOffset->0 > 0 || $Uptime > 5m) && $UpdateID >= $TelegramChatOffset->2) do={
-      :local Trusted false;
       :local Chat ($Message->"chat");
       :local From ($Message->"from");
       :local Command ($Message->"text");
@@ -585,15 +192,14 @@
       # Check if user is trusted
       :local FromId [:tostr ($From->"id")];
       :local ChatIdStr [:tostr ($Chat->"id")];
-      :if ($FromId = $TelegramChatId || $ChatIdStr = $TelegramChatId) do={
-        :set Trusted true;
-      }
-      :if ($Trusted = false && [:len $TelegramChatIdsTrusted] > 0) do={
-        :foreach TrustedId in=$TelegramChatIdsTrusted do={
-          :local TrustedIdStr [:tostr $TrustedId];
-          :if ($FromId = $TrustedIdStr || $ChatIdStr = $TrustedIdStr) do={
-            :set Trusted true;
-          }
+      :local Trusted false;
+      
+      :if ([:typeof $IsUserTrusted] = "array") do={
+        :set Trusted [$IsUserTrusted $FromId $ChatIdStr];
+      } else={
+        # Fallback trust check
+        :if ($FromId = $TelegramChatId || $ChatIdStr = $TelegramChatId) do={
+          :set Trusted true;
         }
       }
 
@@ -601,8 +207,8 @@
         :local Done false;
         
         # Check if user is blocked
-        :if ([$IsUserBlocked ($From->"id")] = true) do={
-          :log warning ($ScriptName . " - Blocked user " . ($From->"id") . " attempted access");
+        :if ([:typeof $IsUserBlocked] = "array" && [$IsUserBlocked $FromId] = true) do={
+          :log warning ($ScriptName . " - Blocked user " . $FromId . " attempted access");
           $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=false; \
             replyto=($Message->"message_id"); threadid=$ThreadId; \
             subject="🚫 Temporarily Blocked"; \
@@ -612,15 +218,14 @@
         
         # Handle "?" - device query
         :if ($Done = false && $Command = "?") do={
-          :log info ($ScriptName . " - Sending notice for update " . $UpdateID);
+          :log info ($ScriptName . " - Status query from update " . $UpdateID);
           :local ActiveStatus "";
           :if ($TelegramChatActive = true) do={ :set ActiveStatus " (and active!)"; }
           $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=true; \
             replyto=($Message->"message_id"); threadid=$ThreadId; \
             subject="🤖 Telegram Bot"; \
             message=("Hello " . ($From->"first_name") . "!\n\n" . \
-              "Online" . $ActiveStatus . \
-              ", awaiting your commands!") });
+              "Online" . $ActiveStatus . ", awaiting your commands!") });
           :set Done true;
         }
         
@@ -634,8 +239,7 @@
           }
           :local StatusText "passive";
           :if ($TelegramChatActive = true) do={ :set StatusText "active"; }
-          :log info ($ScriptName . " - Now " . $StatusText . \
-            " from update " . $UpdateID);
+          :log info ($ScriptName . " - Now " . $StatusText . " from update " . $UpdateID);
           :set Done true;
         }
         
@@ -668,16 +272,17 @@
           :set Done true;
         }
         
-        # Handle confirmation code (e.g., "CONFIRM ABC123" or "confirm abc123")
+        # Handle confirmation code
         :local CommandUpper [:toupper $Command];
         :if ($Done = false && $CommandUpper ~ "^CONFIRM [A-Z0-9]+\$") do={
           :local ConfirmCode [:pick $CommandUpper 8 [:len $CommandUpper]];
-          :local ConfirmedCmd [$CheckConfirmation ($From->"id") $ConfirmCode];
+          :local ConfirmedCmd "";
+          :if ([:typeof $CheckConfirmation] = "array") do={
+            :set ConfirmedCmd [$CheckConfirmation $FromId $ConfirmCode];
+          }
           
           :if ([:len $ConfirmedCmd] > 0) do={
-            :log info ($ScriptName . " - User " . ($From->"id") . " confirmed command: " . $ConfirmedCmd);
-            # Set Command to the confirmed command and let it fall through to execution
-            # Don't auto-activate - require explicit activation
+            :log info ($ScriptName . " - User " . $FromId . " confirmed: " . $ConfirmedCmd);
             :set Command $ConfirmedCmd;
           } else={
             $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=false; \
@@ -693,48 +298,52 @@
              $TelegramChatActive = true)) && [:len $Command] > 0) do={
           
           # Check rate limit
-          :if ([$CheckRateLimit ($From->"id")] = false) do={
+          :if ([:typeof $CheckRateLimit] = "array" && [$CheckRateLimit $FromId] = false) do={
             $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=false; \
               replyto=($Message->"message_id"); threadid=$ThreadId; \
               subject="⏳ Rate Limited"; \
-              message=("You are sending commands too fast.\nLimit: " . $CommandRateLimit . " commands per minute.\nPlease wait and try again.") });
+              message=("You are sending commands too fast.\nLimit: " . $CommandRateLimit . " commands per minute.") });
             :set Done true;
           }
           
           :if ($Done = false) do={
-          # Process custom command aliases
-          :set Command [$ProcessCustomCommand $Command];
-          
-          # Check dangerous commands blocklist
-          :if ([$IsDangerousCommand $Command] = true) do={
-            $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=false; \
-              replyto=($Message->"message_id"); threadid=$ThreadId; \
-              subject="🚫 Command Blocked"; \
-              message=("This command is permanently blocked for security reasons.\n\nCommand: " . $Command) });
-            :log warning ($ScriptName . " - User " . ($From->"id") . " tried blocked command: " . $Command);
-            :set Done true;
-          }
-          
-          # Check whitelist
-          :if ($Done = false && [$CheckWhitelist $Command] = false) do={
-            $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=false; \
-              replyto=($Message->"message_id"); threadid=$ThreadId; \
-              subject="🚫 Command Not Allowed"; \
-              message=("This command is not in the whitelist.\n\nCommand: " . $Command) });
-            :log warning ($ScriptName . " - User " . ($From->"id") . " tried non-whitelisted: " . $Command);
-            :set Done true;
-          }
+            # Process custom command aliases
+            :if ([:typeof $ProcessCustomCommand] = "array") do={
+              :set Command [$ProcessCustomCommand $Command];
+            }
+            
+            # Check dangerous commands blocklist
+            :if ([:typeof $IsDangerousCommand] = "array" && [$IsDangerousCommand $Command] = true) do={
+              $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=false; \
+                replyto=($Message->"message_id"); threadid=$ThreadId; \
+                subject="🚫 Command Blocked"; \
+                message=("This command is blocked for security reasons.\n\nCommand: " . $Command) });
+              :log warning ($ScriptName . " - Blocked command: " . $Command);
+              :set Done true;
+            }
+            
+            # Check whitelist
+            :if ($Done = false && [:typeof $CheckWhitelist] = "array" && [$CheckWhitelist $Command] = false) do={
+              $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=false; \
+                replyto=($Message->"message_id"); threadid=$ThreadId; \
+                subject="🚫 Command Not Allowed"; \
+                message=("This command is not in the whitelist.\n\nCommand: " . $Command) });
+              :log warning ($ScriptName . " - Non-whitelisted command: " . $Command);
+              :set Done true;
+            }
           }
           
           # Check if command requires confirmation
-          :if ($Done = false && [$RequiresConfirmation $Command] = true) do={
-            :local ConfirmCode [$StorePendingConfirmation ($From->"id") $Command ($Message->"message_id")];
+          :if ($Done = false && [:typeof $RequiresConfirmation] = "array" && [$RequiresConfirmation $Command] = true) do={
+            :local ConfirmCode "";
+            :if ([:typeof $StorePendingConfirmation] = "array") do={
+              :set ConfirmCode [$StorePendingConfirmation $FromId $Command ($Message->"message_id")];
+            }
             $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=false; \
               replyto=($Message->"message_id"); threadid=$ThreadId; \
               subject="⚠️ Confirmation Required"; \
               message=("This command requires confirmation:\n\n" . \
                 "Command: `" . $Command . "`\n\n" . \
-                "⚠️ This is a potentially dangerous operation!\n\n" . \
                 "To confirm, send:\n`CONFIRM " . $ConfirmCode . "`\n\n" . \
                 "This code expires in 5 minutes.") });
             :log info ($ScriptName . " - Confirmation requested for: " . $Command);
@@ -742,101 +351,104 @@
           }
           
           :if ($Done = false) do={
-          # Log command if enabled
-          :if ($LogAllCommands = true) do={
-            :log warning ($ScriptName . " - User " . ($From->"id") . " executed: " . $Command);
-          }
-          
-          :if ([$ValidateSyntax $Command] = true) do={
-            :local State "";
-            :local TmpFile ("tmpfs/telegram-bot-" . $UpdateID);
-            
-            :log info ($ScriptName . " - Running command from update " . $UpdateID . ": " . $Command);
-            :execute script=(":do {\n" . $Command . "\n} on-error={ /file/add name=\"" . $TmpFile . ".failed\" };" . \
-              "/file/add name=\"" . $TmpFile . ".done\"") file=($TmpFile . "\00");
-            
-            # Wait for command completion
-            :local WaitTime [:totime $TelegramChatRunTime];
-            :local StartTime [/system clock get time];
-            :local TimedOut false;
-            :while ([:len [/file find name=($TmpFile . ".done")]] = 0 && $TimedOut = false) do={
-              :local CurrentTime [/system clock get time];
-              :if (($CurrentTime - $StartTime) > $WaitTime) do={
-                :set TimedOut true;
-                :set State "⚠️ The command did not finish, still running in background.\n\n";
-              } else={
-                :delay 500ms;
-              }
+            # Log command if enabled
+            :if ($LogAllCommands = true) do={
+              :log warning ($ScriptName . " - User " . $FromId . " executed: " . $Command);
             }
             
-            :if ([:len [/file find name=($TmpFile . ".failed")]] > 0) do={
-              :set State "❌ The command failed with an error!\n\n";
-            }
-            
-            :local Content "";
-            :if ([:len [/file find name=$TmpFile]] > 0) do={
-              :set Content ([/file/get $TmpFile contents]);
-            }
-            
-            :local OutputText "";
-            :if ([:len $Content] > 0) do={
-              :set OutputText ("📝 Output:\n" . $Content);
+            # Validate syntax
+            :local SyntaxValid true;
+            :if ([:typeof $ValidateSyntax] = "array") do={
+              :set SyntaxValid [$ValidateSyntax $Command];
             } else={
-              :set OutputText "📝 No output.";
+              :onerror SyntaxErr { :parse $Command; } do={ :set SyntaxValid false; }
             }
             
-            $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=true; \
-              replyto=($Message->"message_id"); threadid=$ThreadId; \
-              subject="⚙️ Command Result"; \
-              message=("⚙️ Command:\n" . $Command . "\n\n" . $State . $OutputText) });
-            
-            # Cleanup - use exact name matches to avoid regex injection
-            :if ([:len [/file find name=$TmpFile]] > 0) do={
-              /file remove $TmpFile;
+            :if ($SyntaxValid = true) do={
+              :local State "";
+              :local TmpFile ("tmpfs/telegram-bot-" . $UpdateID);
+              
+              :log info ($ScriptName . " - Executing: " . $Command);
+              :execute script=(":do {\n" . $Command . "\n} on-error={ /file/add name=\"" . $TmpFile . ".failed\" };" . \
+                "/file/add name=\"" . $TmpFile . ".done\"") file=($TmpFile . "\00");
+              
+              # Wait for command completion
+              :local WaitTime [:totime $TelegramChatRunTime];
+              :local StartTime [/system clock get time];
+              :local TimedOut false;
+              :while ([:len [/file find name=($TmpFile . ".done")]] = 0 && $TimedOut = false) do={
+                :local CurrentTime [/system clock get time];
+                :if (($CurrentTime - $StartTime) > $WaitTime) do={
+                  :set TimedOut true;
+                  :set State "⚠️ Command still running in background.\n\n";
+                } else={
+                  :delay 500ms;
+                }
+              }
+              
+              :if ([:len [/file find name=($TmpFile . ".failed")]] > 0) do={
+                :set State "❌ Command failed with an error!\n\n";
+              }
+              
+              :local Content "";
+              :if ([:len [/file find name=$TmpFile]] > 0) do={
+                :set Content ([/file/get $TmpFile contents]);
+              }
+              
+              :local OutputText "";
+              :if ([:len $Content] > 0) do={
+                :set OutputText ("📝 Output:\n" . $Content);
+              } else={
+                :set OutputText "📝 No output.";
+              }
+              
+              $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=true; \
+                replyto=($Message->"message_id"); threadid=$ThreadId; \
+                subject="⚙️ Command Result"; \
+                message=("⚙️ Command:\n" . $Command . "\n\n" . $State . $OutputText) });
+              
+              # Cleanup temp files
+              :if ([:len [/file find name=$TmpFile]] > 0) do={ /file remove $TmpFile; }
+              :if ([:len [/file find name=($TmpFile . ".done")]] > 0) do={ /file remove ($TmpFile . ".done"); }
+              :if ([:len [/file find name=($TmpFile . ".failed")]] > 0) do={ /file remove ($TmpFile . ".failed"); }
+            } else={
+              :log info ($ScriptName . " - Syntax validation failed for update " . $UpdateID);
+              $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=false; \
+                replyto=($Message->"message_id"); threadid=$ThreadId; \
+                subject="⚙️ Command Error"; \
+                message=("⚙️ Command:\n" . $Command . "\n\n❌ Syntax validation failed!") });
             }
-            :if ([:len [/file find name=($TmpFile . ".done")]] > 0) do={
-              /file remove ($TmpFile . ".done");
-            }
-            :if ([:len [/file find name=($TmpFile . ".failed")]] > 0) do={
-              /file remove ($TmpFile . ".failed");
-            }
-          } else={
-            :log info ($ScriptName . " - Command from update " . $UpdateID . " failed syntax validation");
-            $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=false; \
-              replyto=($Message->"message_id"); threadid=$ThreadId; \
-              subject="⚙️ Command Error"; \
-              message=("⚙️ Command:\n" . $Command . "\n\n" . \
-                "❌ The command failed syntax validation!") });
-          }
           }
         }
       } else={
-        # Untrusted user
+        # Untrusted user handling
         :local UsernameText "";
         :if ([:len ($From->"username")] = 0) do={
           :set UsernameText "without username";
         } else={
           :set UsernameText ("'" . ($From->"username") . "'");
         }
-        :local MessageText ("Received message from untrusted contact " . $UsernameText . \
-          " (ID " . $From->"id" . ") in update " . $UpdateID);
+        :local MessageText ("Untrusted contact " . $UsernameText . " (ID " . $From->"id" . ")");
         
         :if ($Command ~ ("^! *" . $Identity . "\$")) do={
-          :log warning ($ScriptName . " - " . $MessageText);
+          :log warning ($ScriptName . " - " . $MessageText . " attempted activation");
           :if ($NotifyUntrustedAttempts = true) do={
             $SendTelegram2 ({ origin=$ScriptName; chatid=($Chat->"id"); silent=false; \
               replyto=($Message->"message_id"); threadid=$ThreadId; \
-              subject="🚫 Access Denied"; \
-              message="You are not trusted." });
+              subject="🚫 Access Denied"; message="You are not trusted." });
           }
         } else={
           :log info ($ScriptName . " - " . $MessageText);
         }
       }
     } else={
-      :log debug ($ScriptName . " - Already handled update " . $UpdateID);
+      :log debug ($ScriptName . " - Skipped update " . $UpdateID);
     }
   }
+
+  # ============================================================================
+  # UPDATE OFFSET
+  # ============================================================================
   
   :local NewOffset;
   :if ($UpdateID >= $TelegramChatOffset->2) do={
