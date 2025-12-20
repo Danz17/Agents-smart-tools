@@ -12,11 +12,16 @@ ssh_helper.py
 organize-*.rsc
 FILE-ORGANIZATION-README.txt
 
-# Sensitive configuration files
+# Sensitive configuration files - NEVER COMMIT THESE
+.env
+.env.*
+CREDENTIALS.md
+credentials.md
 **/bot-config-local.rsc
 **/*-config-overlay*.rsc
 **/secrets.txt
 **/tokens.txt
+**/set-credentials.rsc
 
 # Backup files
 *.backup
