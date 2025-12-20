@@ -64,6 +64,74 @@
 }
 
 # ============================================================================
+# SEND MESSAGE WITH KEYBOARD
+# ============================================================================
+
+:global SendTelegramWithKeyboard do={
+  :local ChatId [ :tostr $1 ];
+  :local Text [ :tostr $2 ];
+  :local KeyboardJSON [ :tostr $3 ];
+  :local ThreadId [ :tostr $4 ];
+  
+  :global TelegramTokenId;
+  :global UrlEncode;
+  :global CertificateAvailable;
+  
+  :local SendUrl ("https://api.telegram.org/bot" . $TelegramTokenId . "/sendMessage");
+  :local SendData ("chat_id=" . $ChatId .     "&text=" . [$UrlEncode $Text] .     "&parse_mode=Markdown" .     "&reply_markup=" . [$UrlEncode $KeyboardJSON]);
+  
+  :if ([:len $ThreadId] > 0 && $ThreadId != "0") do={
+    :set SendData ($SendData . "&message_thread_id=" . $ThreadId);
+  }
+  
+  :onerror SendErr {
+    :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
+      /tool/fetch check-certificate=no output=none http-method=post $SendUrl http-data=$SendData;
+    } else={
+      /tool/fetch check-certificate=yes-without-crl output=none http-method=post $SendUrl http-data=$SendData;
+    }
+    :return true;
+  } do={
+    :log warning ("interactive-menu - SendTelegramWithKeyboard failed: " . $SendErr);
+    :return false;
+  }
+}
+
+# ============================================================================
+# SEND MESSAGE WITH INLINE KEYBOARD
+# ============================================================================
+
+:global SendTelegramWithKeyboard do={
+  :local ChatId [ :tostr $1 ];
+  :local MessageText [ :tostr $2 ];
+  :local KeyboardJSON [ :tostr $3 ];
+  :local ThreadId [ :tostr $4 ];
+  
+  :global TelegramTokenId;
+  :global UrlEncode;
+  :global CertificateAvailable;
+  
+  :local SendUrl ("https://api.telegram.org/bot" . $TelegramTokenId . "/sendMessage");
+  :local SendData ("chat_id=" . $ChatId .     "&text=" . [$UrlEncode $MessageText] .     "&parse_mode=Markdown" .     "&reply_markup=" . [$UrlEncode $KeyboardJSON]);
+  
+  :if ([:len $ThreadId] > 0 && $ThreadId != "0") do={
+    :set SendData ($SendData . "&message_thread_id=" . $ThreadId);
+  }
+  
+  :onerror SendErr {
+    :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
+      /tool/fetch check-certificate=no output=none http-method=post $SendUrl http-data=$SendData;
+    } else={
+      /tool/fetch check-certificate=yes-without-crl output=none http-method=post $SendUrl http-data=$SendData;
+    }
+    :return true;
+  } do={
+    :log warning ("SendTelegramWithKeyboard - Failed: " . $SendErr);
+    :return false;
+  }
+}
+
+# ============================================================================
 # SHOW MAIN MENU
 # ============================================================================
 
@@ -432,6 +500,25 @@
         subject="⚡ TxMTC | Uninstall";
         message=("❌ Uninstall failed: " . ($Result->"error"))
       });
+    }
+  }
+  
+  # Handle installer callbacks
+  :if ($CallbackData ~ "^installer:") do={
+    :global InteractiveInstallerLoaded;
+    :if ($InteractiveInstallerLoaded != true) do={
+      :onerror e { /system script run "modules/interactive-installer"; } do={}
+    }
+    :global HandleInstallerCallback;
+    :global EditTelegramMessage;
+    :global CreateInlineKeyboard;
+    
+    :local Result [$HandleInstallerCallback $CallbackData $MessageId];
+    :if ([:typeof $Result] = "array") do={
+      :local MsgText ($Result->"message");
+      :local Keyboard ($Result->"keyboard");
+      :local KeyboardJson [$CreateInlineKeyboard $Keyboard];
+      [$EditTelegramMessage $ChatId $MessageId $MsgText $KeyboardJson];
     }
   }
 }

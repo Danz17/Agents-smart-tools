@@ -106,6 +106,7 @@
   "modules/log-monitor"="modules/log-monitor.rsc";
   "modules/sms-actions"="modules/sms-actions.rsc";
   "modules/cert-monitor"="modules/cert-monitor.rsc";
+  "modules/interactive-installer"="modules/interactive-installer.rsc";
   "set-credentials"="set-credentials.rsc";
   "load-credentials-from-file"="load-credentials-from-file.rsc";
   "update-scripts"="update-scripts.rsc"
@@ -161,6 +162,7 @@
 :global LogMonitorLoaded; :set LogMonitorLoaded;
 :global SMSActionsLoaded; :set SMSActionsLoaded;
 :global CertMonitorLoaded; :set CertMonitorLoaded;
+:global InteractiveInstallerLoaded; :set InteractiveInstallerLoaded;
 
 # Results
 :if ($SilentMode = false) do={

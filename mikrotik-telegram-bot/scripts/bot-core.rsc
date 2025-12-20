@@ -387,6 +387,7 @@
             "Rate: " . $CommandRateLimit . "/min | `CONFIRM code`\n\n" . \
             "🎮 *Interactive:*\n" . \
             "`/menu` - Interactive menu\n" . \
+            "`/modules` - Install/manage modules\n" . \
             "`/scripts` - List available scripts\n" . \
             "`/settings` - User preferences\n" . \
             "`/cleanup` - Clean old messages\n\n" . \
@@ -468,7 +469,30 @@
           :set Done true;
         }
         
-        # Handle /install command
+        # Handle /modules command (interactive installer menu)
+        :if ($Done = false && ($Command = "/modules" || $Command = "/install")) do={
+          :global InteractiveInstallerLoaded;
+          :if ($InteractiveInstallerLoaded != true) do={
+            :onerror e { /system script run "modules/interactive-installer"; } do={}
+          }
+          :global GenerateInstallerMenu;
+          :global CreateInlineKeyboard;
+          :global SendTelegramWithKeyboard;
+          
+          :if ([:typeof $GenerateInstallerMenu] = "array") do={
+            :local Menu [$GenerateInstallerMenu];
+            :local MsgText ($Menu->"message");
+            :local Keyboard ($Menu->"keyboard");
+            :local KeyboardJson [$CreateInlineKeyboard $Keyboard];
+            
+            [$SendTelegramWithKeyboard (:tostr ($Chat->"id")) $MsgText $KeyboardJson $ThreadId];
+          } else={
+            $SendTelegram2 ({ chatid=($Chat->"id"); silent=true;               replyto=($Message->"message_id"); threadid=$ThreadId;               subject="TxMTC | Modules";               message="Interactive installer not available. Use /scripts to view available modules." });
+          }
+          :set Done true;
+        }
+        
+        # Handle /install <scriptid> command
         :if ($Done = false && $Command ~ "^/install ") do={
           :local ScriptId [:pick $Command 8 [:len $Command]];
           :while ([:pick $ScriptId 0 1] = " ") do={
