@@ -273,7 +273,8 @@
 
 # Currently active chat session
 # Set to true when bot is activated with "! identity"
-:global TelegramChatActive false
+:global TelegramChatActive
+:if ([:typeof $TelegramChatActive] != "bool") do={ :set TelegramChatActive false }
 
 # Message ID tracking for reply functionality
 :global TelegramMessageIDs ({})
