@@ -71,6 +71,10 @@
   "modules/shared-functions"="modules/shared-functions.rsc";
   "modules/telegram-api"="modules/telegram-api.rsc";
   "modules/security"="modules/security.rsc";
+  "modules/script-registry"="modules/script-registry.rsc";
+  "modules/interactive-menu"="modules/interactive-menu.rsc";
+  "modules/user-settings"="modules/user-settings.rsc";
+  "modules/script-discovery"="modules/script-discovery.rsc";
   "bot-core"="bot-core.rsc";
   "modules/backup"="modules/backup.rsc";
   "modules/monitoring"="modules/monitoring.rsc";

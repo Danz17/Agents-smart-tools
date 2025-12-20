@@ -29,6 +29,8 @@
 # Import shared functions
 :global UrlEncode;
 :global CertificateAvailable;
+:global SaveBotState;
+:global LoadBotState;
 
 # ============================================================================
 # SEND TELEGRAM MESSAGE
@@ -60,6 +62,17 @@
     :set TelegramMessageIDs ({});
   }
   
+  # Initialize message history for cleanup
+  :global TelegramMessageHistory;
+  :if ([:typeof $TelegramMessageHistory] != "array") do={
+    :local LoadedHistory [$LoadBotState "message-history"];
+    :if ([:typeof $LoadedHistory] = "array") do={
+      :set TelegramMessageHistory $LoadedHistory;
+    } else={
+      :set TelegramMessageHistory ({});
+    }
+  }
+  
   # Build identity string
   :local IdentStr [:tostr $Identity];
   :if ([:typeof $IdentityExtra] = "str" && [:len $IdentityExtra] > 0) do={
@@ -78,6 +91,11 @@
     "&message_thread_id=" . $ThreadId . \
     "&disable_web_page_preview=true");
   
+  # Add inline keyboard if provided
+  :if ([:typeof ($Notification->"keyboard")] = "str" && [:len ($Notification->"keyboard")] > 0) do={
+    :set HTTPData ($HTTPData . "&reply_markup=" . [$UrlEncode ($Notification->"keyboard")]);
+  }
+  
   # Send message
   :onerror SendErr {
     :local CheckCert [$CertificateAvailable "ISRG Root X1"];
@@ -95,6 +113,20 @@
     # Store message ID for reply tracking
     :local MsgId [ :tostr ([ :deserialize from=json $Data ]->"result"->"message_id") ];
     :set ($TelegramMessageIDs->$MsgId) 1;
+    
+    # Track message for cleanup (check if critical flag is set)
+    :local IsCritical false;
+    :if ([:typeof ($Notification->"critical")] = "bool") do={
+      :set IsCritical ($Notification->"critical");
+    }
+    :set ($TelegramMessageHistory->$MsgId) ({
+      chatid=$ChatId;
+      timestamp=[:timestamp];
+      critical=$IsCritical;
+      subject=$Subject
+    });
+    [$SaveBotState "message-history" $TelegramMessageHistory];
+    
     :return $MsgId;
   } do={
     :log info ("telegram-api - Message queued: " . $SendErr);
@@ -199,11 +231,11 @@
         :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
           :set Data ([ /tool/fetch check-certificate=no output=user \
             ("https://api.telegram.org/bot" . $TelegramTokenId . "/getUpdates?offset=" . \
-            $TelegramChatOffset->0 . "&allowed_updates=%5B%22message%22%5D") as-value ]->"data");
+            $TelegramChatOffset->0 . "&allowed_updates=%5B%22message%22%2C%22callback_query%22%5D") as-value ]->"data");
         } else={
           :set Data ([ /tool/fetch check-certificate=yes-without-crl output=user \
             ("https://api.telegram.org/bot" . $TelegramTokenId . "/getUpdates?offset=" . \
-            $TelegramChatOffset->0 . "&allowed_updates=%5B%22message%22%5D") as-value ]->"data");
+            $TelegramChatOffset->0 . "&allowed_updates=%5B%22message%22%2C%22callback_query%22%5D") as-value ]->"data");
         }
         :set TelegramRandomDelay ([:tonum $TelegramRandomDelay] - 1);
         :if ($TelegramRandomDelay < 0) do={ :set TelegramRandomDelay 0; }
@@ -260,6 +292,135 @@
   
   :set TelegramQueue $NewQueue;
   :return $Processed;
+}
+
+# ============================================================================
+# MESSAGE TRACKING AND CLEANUP
+# ============================================================================
+
+# Initialize message history
+:global TelegramMessageHistory;
+:if ([:typeof $TelegramMessageHistory] != "array") do={
+  :local LoadedHistory [$LoadBotState "message-history"];
+  :if ([:typeof $LoadedHistory] = "array") do={
+    :set TelegramMessageHistory $LoadedHistory;
+  } else={
+    :set TelegramMessageHistory ({});
+  }
+}
+
+# ============================================================================
+# MARK MESSAGE AS CRITICAL
+# ============================================================================
+
+:global MarkMessageCritical do={
+  :local MsgId [ :tostr $1 ];
+  
+  :if ([:typeof ($TelegramMessageHistory->$MsgId)] = "array") do={
+    :set ($TelegramMessageHistory->$MsgId->"critical") true;
+    [$SaveBotState "message-history" $TelegramMessageHistory];
+    :return true;
+  }
+  :return false;
+}
+
+# ============================================================================
+# GET MESSAGE AGE
+# ============================================================================
+
+:global GetMessageAge do={
+  :local MsgId [ :tostr $1 ];
+  
+  :if ([:typeof ($TelegramMessageHistory->$MsgId)] = "array") do={
+    :local MsgTime ($TelegramMessageHistory->$MsgId->"timestamp");
+    :local CurrentTime [:timestamp];
+    :return ($CurrentTime - $MsgTime);
+  }
+  :return;
+}
+
+# ============================================================================
+# CLEANUP OLD MESSAGES
+# ============================================================================
+
+:global CleanupOldMessages do={
+  :local ChatId [ :tostr $1 ];
+  :local RetentionPeriod $2;
+  :local KeepCritical $3;
+  
+  :if ([:typeof $RetentionPeriod] != "time") do={
+    :set RetentionPeriod 24h;
+  }
+  :if ([:typeof $KeepCritical] != "bool") do={
+    :set KeepCritical true;
+  }
+  
+  :global TelegramTokenId;
+  :global TelegramMessageHistory;
+  :local CurrentTime [:timestamp];
+  :local Deleted 0;
+  :local NewHistory ({});
+  
+  :foreach MsgId,MsgData in=$TelegramMessageHistory do={
+    :local MsgChatId [:tostr ($MsgData->"chatid")];
+    :if ($MsgChatId = $ChatId) do={
+      :local MsgTime ($MsgData->"timestamp");
+      :local Age ($CurrentTime - $MsgTime);
+      :local IsCritical ($MsgData->"critical");
+      
+      :if ($Age > $RetentionPeriod && ($KeepCritical = false || $IsCritical = false)) do={
+        # Delete message
+        :onerror DelErr {
+          :local DeleteUrl ("https://api.telegram.org/bot" . $TelegramTokenId . "/deleteMessage");
+          :local DeleteData ("chat_id=" . $ChatId . "&message_id=" . $MsgId);
+          :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
+            /tool/fetch check-certificate=no output=none http-method=post $DeleteUrl http-data=$DeleteData;
+          } else={
+            /tool/fetch check-certificate=yes-without-crl output=none http-method=post $DeleteUrl http-data=$DeleteData;
+          }
+          :set Deleted ($Deleted + 1);
+        } do={
+          # Keep in history if deletion failed
+          :set ($NewHistory->$MsgId) $MsgData;
+        }
+      } else={
+        # Keep message
+        :set ($NewHistory->$MsgId) $MsgData;
+      }
+    } else={
+      # Keep messages from other chats
+      :set ($NewHistory->$MsgId) $MsgData;
+    }
+  }
+  
+  :set TelegramMessageHistory $NewHistory;
+  [$SaveBotState "message-history" $TelegramMessageHistory];
+  :log debug ("telegram-api - Cleaned up " . $Deleted . " old messages for chat " . $ChatId);
+  :return $Deleted;
+}
+
+# ============================================================================
+# AUTO CLEANUP (called periodically)
+# ============================================================================
+
+:global AutoCleanupMessages do={
+  :global MessageRetentionPeriod;
+  :global KeepCriticalMessages;
+  :global AutoCleanupEnabled;
+  :global TelegramChatId;
+  
+  :if ([:typeof $AutoCleanupEnabled] != "bool" || $AutoCleanupEnabled = false) do={
+    :return 0;
+  }
+  
+  :if ([:typeof $MessageRetentionPeriod] != "time") do={
+    :set MessageRetentionPeriod 24h;
+  }
+  :if ([:typeof $KeepCriticalMessages] != "bool") do={
+    :set KeepCriticalMessages true;
+  }
+  
+  :return [$CleanupOldMessages $TelegramChatId $MessageRetentionPeriod $KeepCriticalMessages];
 }
 
 # ============================================================================

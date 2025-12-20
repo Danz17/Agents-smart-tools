@@ -66,7 +66,7 @@
 # ============================================================================
 
 :put "[ 3/10] Checking installed scripts..."
-:local RequiredScripts ({"bot-config"; "bot-core"; "modules/shared-functions"; "modules/telegram-api"; "modules/security"; "modules/monitoring"; "modules/backup"; "modules/custom-commands"; "modules/wireless-monitoring"; "modules/daily-summary"})
+:local RequiredScripts ({"bot-config"; "bot-core"; "modules/shared-functions"; "modules/telegram-api"; "modules/security"; "modules/script-registry"; "modules/interactive-menu"; "modules/user-settings"; "modules/script-discovery"; "modules/monitoring"; "modules/backup"; "modules/custom-commands"; "modules/wireless-monitoring"; "modules/daily-summary"})
 :local ScriptsOK 0
 
 :foreach Script in=$RequiredScripts do={

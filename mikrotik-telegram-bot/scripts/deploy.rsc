@@ -110,6 +110,10 @@
   "modules/shared-functions";
   "modules/telegram-api";
   "modules/security";
+  "modules/script-registry";
+  "modules/interactive-menu";
+  "modules/user-settings";
+  "modules/script-discovery";
   "modules/monitoring";
   "modules/backup";
   "modules/custom-commands";
@@ -194,7 +198,11 @@
 :local Modules ({
   "modules/shared-functions";
   "modules/telegram-api";
-  "modules/security"
+  "modules/security";
+  "modules/script-registry";
+  "modules/interactive-menu";
+  "modules/user-settings";
+  "modules/script-discovery"
 })
 
 :foreach Module in=$Modules do={

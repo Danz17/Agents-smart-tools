@@ -149,6 +149,48 @@
 :global UseNotificationSymbols true
 
 # ============================================================================
+# MESSAGE MANAGEMENT SETTINGS
+# ============================================================================
+
+# Message retention period (how long to keep messages before cleanup)
+:global MessageRetentionPeriod 24h
+
+# Never delete critical messages (alerts, errors, confirmations)
+:global KeepCriticalMessages true
+
+# Enable automatic message cleanup
+:global AutoCleanupEnabled true
+
+# How often to run cleanup (interval)
+:global CleanupInterval 1h
+
+# Last cleanup time (initialized on first run)
+:global LastCleanupTime
+
+# ============================================================================
+# SCRIPT REGISTRY SETTINGS
+# ============================================================================
+
+# URL for script registry updates
+:global ScriptRegistryURL "https://raw.githubusercontent.com/Danz17/Agents-smart-tools/main/mikrotik-telegram-bot/scripts-registry"
+
+# Automatically update registry from remote
+:global AutoUpdateRegistry false
+
+# How often to check for registry updates
+:global RegistryUpdateInterval 1d
+
+# ============================================================================
+# INTERACTIVE FEATURES SETTINGS
+# ============================================================================
+
+# Enable interactive menus with inline keyboards
+:global EnableInteractiveMenus true
+
+# Enable automatic script discovery
+:global EnableScriptDiscovery true
+
+# ============================================================================
 # COMMAND EXECUTION SETTINGS
 # ============================================================================
 
@@ -226,7 +268,8 @@
 # Bot polling offset tracking
 # Used internally to track last processed update
 # Don't modify unless you know what you're doing
-:global TelegramChatOffset { 0; 0; 0 }
+:global TelegramChatOffset
+:if ([:typeof $TelegramChatOffset] != "array") do={ :set TelegramChatOffset { 0; 0; 0 } }
 
 # Currently active chat session
 # Set to true when bot is activated with "! identity"

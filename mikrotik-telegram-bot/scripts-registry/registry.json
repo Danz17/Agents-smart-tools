@@ -1,0 +1,101 @@
+{
+  "check-routeros-update": {
+    "name": "check-routeros-update",
+    "category": "monitoring",
+    "description": "Notify when RouterOS updates are available",
+    "version": "1.0.0",
+    "source": "https://raw.githubusercontent.com/eworm-de/routeros-scripts/main/check-routeros-update.rsc",
+    "dependencies": [],
+    "critical": false
+  },
+  "check-health": {
+    "name": "check-health",
+    "category": "monitoring",
+    "description": "System health monitoring and alerts",
+    "version": "1.0.0",
+    "source": "https://raw.githubusercontent.com/eworm-de/routeros-scripts/main/check-health.rsc",
+    "dependencies": [],
+    "critical": false
+  },
+  "backup-cloud": {
+    "name": "backup-cloud",
+    "category": "backup",
+    "description": "Upload backup to MikroTik Cloud",
+    "version": "1.0.0",
+    "source": "https://raw.githubusercontent.com/eworm-de/routeros-scripts/main/backup-cloud.rsc",
+    "dependencies": [],
+    "critical": false
+  },
+  "dhcp-to-dns": {
+    "name": "dhcp-to-dns",
+    "category": "network-management",
+    "description": "Create DNS records for DHCP leases",
+    "version": "1.0.0",
+    "source": "https://raw.githubusercontent.com/eworm-de/routeros-scripts/main/dhcp-to-dns.rsc",
+    "dependencies": [],
+    "critical": false
+  },
+  "kid-control-on": {
+    "name": "Kid Control On",
+    "category": "parental-control",
+    "description": "Block internet access for child devices",
+    "version": "1.0.0",
+    "source": "local",
+    "dependencies": [],
+    "critical": false
+  },
+  "kid-control-off": {
+    "name": "Kid Control Off",
+    "category": "parental-control",
+    "description": "Enable full internet access for child devices",
+    "version": "1.0.0",
+    "source": "local",
+    "dependencies": [],
+    "critical": false
+  },
+  "poe-enable": {
+    "name": "PoE Enable",
+    "category": "utilities",
+    "description": "Enable PoE output on specified port",
+    "version": "1.0.0",
+    "source": "local",
+    "dependencies": [],
+    "critical": false
+  },
+  "poe-disable": {
+    "name": "PoE Disable",
+    "category": "utilities",
+    "description": "Disable PoE output on specified port",
+    "version": "1.0.0",
+    "source": "local",
+    "dependencies": [],
+    "critical": false
+  },
+  "usb-reboot": {
+    "name": "USB-port reboot",
+    "category": "utilities",
+    "description": "Reboot USB device connected to router",
+    "version": "1.0.0",
+    "source": "local",
+    "dependencies": [],
+    "critical": false
+  },
+  "ip-changed": {
+    "name": "IP Changed",
+    "category": "monitoring",
+    "description": "Notify when router IP address changes",
+    "version": "1.0.0",
+    "source": "local",
+    "dependencies": [],
+    "critical": false
+  },
+  "system-status": {
+    "name": "System Status",
+    "category": "monitoring",
+    "description": "Send system status report via Telegram",
+    "version": "1.0.0",
+    "source": "local",
+    "dependencies": [],
+    "critical": false
+  }
+}
