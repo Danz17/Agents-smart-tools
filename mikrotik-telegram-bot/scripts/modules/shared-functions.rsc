@@ -214,7 +214,7 @@
   } do={
     :log debug ("shared-functions - State file not found: " . $StateName);
   }
-  :return;
+  :return ({});
 }
 
 # ============================================================================
