@@ -294,10 +294,23 @@
     }
 
     :local Message ($Update->"message");
-    :local IsAnyReply ([:typeof ($Message->"reply_to_message")] = "array");
-    :local IsMyReply ($TelegramMessageIDs->[:tostr ($Message->"reply_to_message"->"message_id")]);
+    :if ([:typeof $Message] != "array") do={
+      :continue;
+    }
     
-    :if (($IsMyReply = 1 || $TelegramChatOffset->0 > 0 || $Uptime > 5m) && $UpdateID >= $TelegramChatOffset->2) do={
+    :local IsAnyReply ([:typeof ($Message->"reply_to_message")] = "array");
+    :local IsMyReply false;
+    :if ($IsAnyReply = true) do={
+      :local ReplyMsgId [:tostr ($Message->"reply_to_message"->"message_id")];
+      :if ([:typeof ($TelegramMessageIDs->$ReplyMsgId)] != "nothing" && \
+           ($TelegramMessageIDs->$ReplyMsgId) = 1) do={
+        :set IsMyReply true;
+      }
+    }
+    
+    # Process message if update_id is >= current offset
+    # (Always process new messages, regardless of reply status or uptime)
+    :if ($UpdateID >= $TelegramChatOffset->2) do={
       :local Chat ($Message->"chat");
       :local From ($Message->"from");
       :local Command ($Message->"text");
@@ -540,7 +553,8 @@
         }
         
         # Handle command execution
-        :if ($Done = false && ($IsMyReply = 1 || ($IsAnyReply = false && \
+        # Execute if: reply to bot message OR (not a reply AND bot is active)
+        :if ($Done = false && ($IsMyReply = true || ($IsAnyReply = false && \
              $TelegramChatActive = true)) && [:len $Command] > 0) do={
           
           # Check rate limit

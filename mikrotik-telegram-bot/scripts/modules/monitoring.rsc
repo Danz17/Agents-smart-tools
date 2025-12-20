@@ -51,6 +51,7 @@
   :global CheckHealthRAMUtilizationNotified;
   :global CheckHealthDiskUtilizationNotified;
   :global CheckHealthInternetConnectivity;
+  :global CheckHealthInterfaceDown;
   :global TelegramChatId;
   :global TelegramThreadId;
 
@@ -250,16 +251,57 @@
       :if ([:len $Current] > 0) do={ :set ($InterfaceList->[:len $InterfaceList]) $Current; }
     }
     
+    # Initialize interface down tracking
+    :if ([:typeof $CheckHealthInterfaceDown] != "array") do={
+      :set CheckHealthInterfaceDown ({});
+    }
+    
     :foreach IntName in=$InterfaceList do={
       :onerror IntErr {
-        :local Int [ /interface/get [find name=$IntName] ];
-        :if (($Int->"running") = false && ($Int->"disabled") = false) do={
-          $SendTelegram2 ({ silent=false; \
-            subject="🔌 Interface Down Alert"; \
-            message=("Interface " . $IntName . " on " . $Identity . " is down!") });
-          :log warning ($ScriptName . " - Interface down: " . $IntName);
+        :local IntFound [/interface/find where name=$IntName];
+        :if ([:len $IntFound] = 0) do={
+          :log debug ($ScriptName . " - Interface not found: " . $IntName);
+          # Remove from tracking if interface doesn't exist
+          :if ([:typeof ($CheckHealthInterfaceDown->$IntName)] != "nothing") do={
+            :set ($CheckHealthInterfaceDown->$IntName) "";
+          }
+        } else={
+          :local Int [ /interface/get $IntFound ];
+          :local IsDisabled ($Int->"disabled");
+          :local IsRunning ($Int->"running");
+          :local WasDown ($CheckHealthInterfaceDown->$IntName);
+          
+          # Only alert if interface is enabled but not running (should be up but is down)
+          :local IsDown ($IsDisabled = false && $IsRunning = false);
+          
+          # Alert if interface just went down (wasn't down before)
+          :if ($IsDown = true && $WasDown != true) do={
+            $SendTelegram2 ({ silent=false; \
+              subject="🔌 Interface Down Alert"; \
+              message=("Interface " . $IntName . " on " . $Identity . " is down!\n\nStatus: Enabled but not running.") });
+            :log warning ($ScriptName . " - Interface down: " . $IntName);
+            :set ($CheckHealthInterfaceDown->$IntName) true;
+          }
+          
+          # Alert recovery if interface came back up (was down before)
+          :if ($IsDown = false && $WasDown = true) do={
+            $SendTelegram2 ({ silent=true; \
+              subject="✅ Interface Recovered"; \
+              message=("Interface " . $IntName . " on " . $Identity . " is back up.") });
+            :log info ($ScriptName . " - Interface recovered: " . $IntName);
+            :set ($CheckHealthInterfaceDown->$IntName) false;
+          }
+          
+          # Update state
+          :if ($IsDown = true) do={
+            :set ($CheckHealthInterfaceDown->$IntName) true;
+          } else={
+            :set ($CheckHealthInterfaceDown->$IntName) false;
+          }
         }
-      } do={ :log debug ($ScriptName . " - Interface not found: " . $IntName); }
+      } do={ 
+        :log debug ($ScriptName . " - Error checking interface: " . $IntName);
+      }
     }
   }
 

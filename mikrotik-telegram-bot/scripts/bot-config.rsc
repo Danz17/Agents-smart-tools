@@ -288,6 +288,7 @@
 :global CheckHealthRAMUtilizationNotified false
 :global CheckHealthDiskUtilizationNotified false
 :global CheckHealthInternetConnectivity true
+:global CheckHealthInterfaceDown ({})
 
 # RouterOS update notification tracking
 :global SentRouterosUpdateNotification ""
