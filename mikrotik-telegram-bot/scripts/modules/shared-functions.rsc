@@ -166,6 +166,13 @@
 
 :global ValidateSyntax do={
   :local Code [ :tostr $1 ];
+
+  # Menu path commands (like /log print) are always valid - skip parsing
+  # :parse only works for script code, not terminal menu commands
+  :if ([:pick $Code 0 1] = "/") do={
+    :return true;
+  }
+
   :onerror SyntaxErr {
     :parse $Code;
     :return true;
