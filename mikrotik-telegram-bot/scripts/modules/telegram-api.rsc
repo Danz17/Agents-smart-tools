@@ -340,7 +340,7 @@
 }
 
 # ============================================================================
-# CLEANUP OLD MESSAGES
+# CLEANUP OLD MESSAGES (Enhanced - more aggressive cleanup)
 # ============================================================================
 
 :global CleanupOldMessages do={
@@ -349,7 +349,7 @@
   :local KeepCritical $3;
   
   :if ([:typeof $RetentionPeriod] != "time") do={
-    :set RetentionPeriod 24h;
+    :set RetentionPeriod 6h;
   }
   :if ([:typeof $KeepCritical] != "bool") do={
     :set KeepCritical true;
@@ -357,9 +357,11 @@
   
   :global TelegramTokenId;
   :global TelegramMessageHistory;
+  :global DeleteTelegramMessage;
   :local CurrentTime [:timestamp];
   :local Deleted 0;
   :local NewHistory ({});
+  :local IrrelevantSubjects ({"Queue Notice"; "Interface Recovered"; "CPU Utilization Recovered"; "RAM Utilization Recovered"; "Disk Usage Recovered"});
   
   :foreach MsgId,MsgData in=$TelegramMessageHistory do={
     :local MsgChatId [:tostr ($MsgData->"chatid")];
@@ -367,18 +369,33 @@
       :local MsgTime ($MsgData->"timestamp");
       :local Age ($CurrentTime - $MsgTime);
       :local IsCritical ($MsgData->"critical");
+      :local Subject [:tostr ($MsgData->"subject")];
+      :local ShouldDelete false;
       
+      # Delete if older than retention period (unless critical)
       :if ($Age > $RetentionPeriod && ($KeepCritical = false || $IsCritical = false)) do={
+        :set ShouldDelete true;
+      }
+      
+      # Delete irrelevant recovery/status messages after 1 hour (even if recent)
+      :if ($Age > 1h && $IsCritical = false) do={
+        :foreach IrrelevantSubj in=$IrrelevantSubjects do={
+          :if ($Subject ~ $IrrelevantSubj) do={
+            :set ShouldDelete true;
+          }
+        }
+      }
+      
+      :if ($ShouldDelete = true) do={
         # Delete message
         :onerror DelErr {
-          :local DeleteUrl ("https://api.telegram.org/bot" . $TelegramTokenId . "/deleteMessage");
-          :local DeleteData ("chat_id=" . $ChatId . "&message_id=" . $MsgId);
-          :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
-            /tool/fetch check-certificate=no output=none http-method=post $DeleteUrl http-data=$DeleteData;
+          :local DelResult [$DeleteTelegramMessage $ChatId $MsgId];
+          :if ($DelResult = true) do={
+            :set Deleted ($Deleted + 1);
           } else={
-            /tool/fetch check-certificate=yes-without-crl output=none http-method=post $DeleteUrl http-data=$DeleteData;
+            # Keep in history if deletion failed
+            :set ($NewHistory->$MsgId) $MsgData;
           }
-          :set Deleted ($Deleted + 1);
         } do={
           # Keep in history if deletion failed
           :set ($NewHistory->$MsgId) $MsgData;

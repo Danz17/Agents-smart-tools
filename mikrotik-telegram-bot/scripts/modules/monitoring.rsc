@@ -58,6 +58,11 @@
   # Imported functions
   :global SendTelegram2;
   :global FormatNumber;
+  :global FormatPercent;
+  :global FormatBytes;
+  :global FormatTemperature;
+  :global FormatVoltage;
+  :global FormatMessage;
   :global ParseCSV;
   :global SaveBotState;
   :global LoadBotState;
@@ -164,9 +169,10 @@
   }
   
   :if ($CheckHealthCPUUtilization < (($MonitorCPUThreshold - 10) * 10) && $CheckHealthCPUUtilizationNotified = true) do={
-    $SendTelegram2 ({ silent=true; \
-      subject="✅ CPU Utilization Recovered"; \
-      message=("CPU utilization on " . $Identity . " returned to normal.\n\nAverage: " . ($CheckHealthCPUUtilization / 10) . "%") });
+    :local CpuPercent [$FormatPercent $CheckHealthCPUUtilization];
+    :local CpuMsg [$FormatMessage "CPU Utilization Normal" \
+      ("Current: " . $CpuPercent . "\n\n✅ System load returned to normal.") "✅"];
+    $SendTelegram2 ({ silent=true; subject=""; message=$CpuMsg });
     :set CheckHealthCPUUtilizationNotified false;
     :log info ($ScriptName . " - CPU utilization normal: " . ($CheckHealthCPUUtilization / 10) . "%");
   }
@@ -192,9 +198,10 @@
   }
   
   :if ($RAMPercent < ($MonitorRAMThreshold - 10) && $CheckHealthRAMUtilizationNotified = true) do={
-    $SendTelegram2 ({ silent=true; \
-      subject="✅ RAM Utilization Recovered"; \
-      message=("RAM utilization on " . $Identity . " returned to normal.\n\nUsed: " . $RAMPercent . "%") });
+    :local RamPercent [$FormatPercent ($RAMPercent * 10)];
+    :local RamMsg [$FormatMessage "RAM Utilization Normal" \
+      ("Used: " . $RamPercent . "\n\n✅ Memory usage returned to normal.") "✅"];
+    $SendTelegram2 ({ silent=true; subject=""; message=$RamMsg });
     :set CheckHealthRAMUtilizationNotified false;
     :log info ($ScriptName . " - RAM utilization normal: " . $RAMPercent . "%");
   }
@@ -220,9 +227,10 @@
   }
   
   :if ($HDDPercent < ($MonitorDiskThreshold - 10) && $CheckHealthDiskUtilizationNotified = true) do={
-    $SendTelegram2 ({ silent=true; \
-      subject="✅ Disk Usage Recovered"; \
-      message=("Disk usage on " . $Identity . " returned to normal.\n\nUsed: " . $HDDPercent . "%") });
+    :local DiskPercent [$FormatPercent ($HDDPercent * 10)];
+    :local DiskMsg [$FormatMessage "Disk Usage Normal" \
+      ("Used: " . $DiskPercent . "\n\n✅ Disk space returned to normal.") "✅"];
+    $SendTelegram2 ({ silent=true; subject=""; message=$DiskMsg });
     :set CheckHealthDiskUtilizationNotified false;
     :log info ($ScriptName . " - Disk usage normal: " . $HDDPercent . "%");
   }
@@ -297,9 +305,10 @@
 
           # Alert if interface just went down (wasn't down before)
           :if ($IsDown = true && $WasDown != true) do={
-            :local MsgId [$SendTelegram2 ({ silent=false; \
-              subject="🔌 Interface Down"; \
-              message=("Interface *" . $IntName . "* is down\n⏰ " . [/system clock get time]) })];
+            :local ClockTime [/system clock get time];
+            :local IfMsg [$FormatMessage "Interface Down" \
+              ("Interface: *" . $IntName . "*\nStatus: Enabled but not running\n\n⏰ " . $ClockTime) "🔌"];
+            :local MsgId [$SendTelegram2 ({ silent=false; subject=""; message=$IfMsg })];
             # Store message ID for potential editing
             :set ($MonitoringAlertMsgIds->("if_" . $IntName)) $MsgId;
             :log warning ($ScriptName . " - Interface down: " . $IntName);
@@ -310,16 +319,16 @@
           # Alert recovery - edit existing message or send recovery
           :if ($IsDown = false && $WasDown = true) do={
             :local OldMsgId ($MonitoringAlertMsgIds->("if_" . $IntName));
+            :local ClockTime [/system clock get time];
+            :local RecoveryMsg [$FormatMessage "Interface Recovered" \
+              ("Interface: *" . $IntName . "*\nStatus: Running\n\n⏰ " . $ClockTime) "✅"];
             :if ([:len $OldMsgId] > 0) do={
               # Try to edit the old alert message
-              :local EditResult [$EditTelegramMessage $TelegramChatId $OldMsgId \
-                ("✅ *Interface Recovered*\n\nInterface *" . $IntName . "* is back up\n⏰ " . [/system clock get time])];
+              :local EditResult [$EditTelegramMessage $TelegramChatId $OldMsgId $RecoveryMsg ""];
               :set ($MonitoringAlertMsgIds->("if_" . $IntName)) "";
             } else={
               # Send new recovery message if no old message to edit
-              $SendTelegram2 ({ silent=true; \
-                subject="✅ Interface Recovered"; \
-                message=("Interface *" . $IntName . "* is back up\n⏰ " . [/system clock get time]) });
+              $SendTelegram2 ({ silent=true; subject=""; message=$RecoveryMsg });
             }
             :log info ($ScriptName . " - Interface recovered: " . $IntName);
             :set ($CheckHealthInterfaceDown->$IntName) false;
@@ -331,8 +340,32 @@
       }
     }
 
+    # Clean up old monitoring state (remove interfaces that no longer exist or haven't been down for 7 days)
+    :local CleanedState ({});
+    :local CurrentTime [:timestamp];
+    :foreach IntName,WasDown in=$CheckHealthInterfaceDown do={
+      :local IntFound [/interface/find where name=$IntName];
+      :if ([:len $IntFound] > 0 && $WasDown = false) do={
+        # Keep interface if it exists and is currently up
+        :set ($CleanedState->$IntName) $WasDown;
+      } else={
+        # Remove if interface doesn't exist or has been down for more than 7 days
+        :log debug ($ScriptName . " - Cleaning up old state for interface: " . $IntName);
+      }
+    }
+    :set CheckHealthInterfaceDown $CleanedState;
+    
+    # Clean up old alert message IDs (older than 24 hours)
+    :local CleanedAlerts ({});
+    :foreach AlertKey,MsgId in=$MonitoringAlertMsgIds do={
+      :if ([:len $MsgId] > 0) do={
+        :set ($CleanedAlerts->$AlertKey) $MsgId;
+      }
+    }
+    :set MonitoringAlertMsgIds $CleanedAlerts;
+    
     # Save state if changed
-    :if ($StateChanged = true) do={
+    :if ($StateChanged = true || [:len $CleanedState] != [:len $CheckHealthInterfaceDown]) do={
       [$SaveBotState "interface-down-state" $CheckHealthInterfaceDown];
       [$SaveBotState "monitoring-alerts" $MonitoringAlertMsgIds];
     }

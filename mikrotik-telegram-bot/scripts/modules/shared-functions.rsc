@@ -290,6 +290,95 @@
 }
 
 # ============================================================================
+# FORMAT NUMBER (with thousand separators)
+# ============================================================================
+
+:global FormatNumber do={
+  :local Num [:tonum $1];
+  :local Result "";
+  :local NumStr [:tostr $Num];
+  :local DecimalPos [:find $NumStr "."];
+  :local IntPart $NumStr;
+  :local DecPart "";
+  :if ([:typeof $DecimalPos] = "num") do={
+    :set IntPart [:pick $NumStr 0 $DecimalPos];
+    :set DecPart [:pick $NumStr $DecimalPos [:len $NumStr]];
+  }
+  :local Count 0;
+  :for I from=([:len $IntPart] - 1) to=0 do={
+    :if ($Count > 0 && ($Count % 3) = 0) do={
+      :set Result ("," . $Result);
+    }
+    :set Result ([:pick $IntPart $I ($I + 1)] . $Result);
+    :set Count ($Count + 1);
+  }
+  :return ($Result . $DecPart);
+}
+
+# ============================================================================
+# FORMAT PERCENTAGE (with 1 decimal place)
+# ============================================================================
+
+:global FormatPercent do={
+  :local Value [:tonum $1];
+  :local Result [:tostr ($Value / 10)];
+  :local DotPos [:find $Result "."];
+  :if ([:typeof $DotPos] = "num") do={
+    :set Result [:pick $Result 0 ($DotPos + 2)];
+  }
+  :return ($Result . "%");
+}
+
+# ============================================================================
+# FORMAT TEMPERATURE
+# ============================================================================
+
+:global FormatTemperature do={
+  :local Temp [:tonum $1];
+  :return ([:tostr $Temp] . "°C");
+}
+
+# ============================================================================
+# FORMAT VOLTAGE
+# ============================================================================
+
+:global FormatVoltage do={
+  :local Volt [:tonum $1];
+  :return ([:tostr $Volt] . "V");
+}
+
+# ============================================================================
+# FORMAT TIME (from timestamp)
+# ============================================================================
+
+:global FormatTime do={
+  :local Timestamp [:tonum $1];
+  :local Clock [/system clock get];
+  :local CurrentTime ($Clock->"time");
+  :local CurrentDate ($Clock->"date");
+  :return ($CurrentTime);
+}
+
+# ============================================================================
+# FORMAT MESSAGE (User-friendly formatting)
+# ============================================================================
+
+:global FormatMessage do={
+  :local Title [ :tostr $1 ];
+  :local Content [ :tostr $2 ];
+  :local Emoji [ :tostr $3 ];
+  
+  :if ([:len $Emoji] = 0) do={ :set Emoji "⚡"; }
+  
+  :local Result "";
+  :if ([:len $Title] > 0) do={
+    :set Result ($Emoji . " *" . $Title . "*\n\n");
+  }
+  :set Result ($Result . $Content);
+  :return $Result;
+}
+
+# ============================================================================
 # INITIALIZATION FLAG
 # ============================================================================
 
