@@ -1,41 +1,38 @@
 #!rsc by RouterOS
-# ═══════════════════════════════════════════════════════════════════════════
 # TxMTC - Telegram x MikroTik Tunnel Controller Sub-Agent
-# Script Updater / Installer
-# ───────────────────────────────────────────────────────────────────────────
+# Script Updater / Auto-Updater
 # GitHub: https://github.com/Danz17/Agents-smart-tools
-# Author: P̷h̷e̷n̷i̷x̷ | Crafted with love & frustration
-# ═══════════════════════════════════════════════════════════════════════════
-#
-# Based on patterns from https://github.com/eworm-de/routeros-scripts
-# Run: /tool fetch url="https://raw.githubusercontent.com/Danz17/Agents-smart-tools/main/mikrotik-telegram-bot/scripts/update-scripts.rsc" dst-path=update-scripts.rsc; /import update-scripts.rsc
-#
-# Features:
-# - Configurable GitHub source (user/repo/branch/path) for forks
-# - Auto-detects existing installation prefix (e.g., "bot/", "telegram/")
-# - Wildcard matching finds scripts in nested folder structures
-# - Falls back to exact match, then regex pattern matching
+# Author: Phenix | Version: 2.1.0
 
 :local ScriptName "update-scripts";
 
-# ============================================================================
-# CONFIGURABLE PATHS - Adjust these for custom installations
-# ============================================================================
-
-# GitHub repository settings (change for forks or different branches)
+# Configuration
 :local GitHubUser "Danz17";
 :local GitHubRepo "Agents-smart-tools";
 :local GitHubBranch "main";
 :local GitHubPath "mikrotik-telegram-bot/scripts";
-
-# Build base URL dynamically
 :local BaseURL ("https://raw.githubusercontent.com/" . $GitHubUser . "/" . $GitHubRepo . "/" . $GitHubBranch . "/" . $GitHubPath);
+:local VersionURL ($BaseURL . "/version.txt");
 
-# Local script name prefix (for nested installations)
-# Examples: "" for flat, "bot/" for /system/script name=bot/bot-core, etc.
+# Local version tracking
+:global TxMTCVersion;
+:if ([:typeof $TxMTCVersion] != "str") do={ :set TxMTCVersion "0.0.0"; }
+
+# Auto-update settings
+:global AutoUpdateEnabled;
+:global AutoUpdateInterval;
+:global AutoUpdateNotify;
+:if ([:typeof $AutoUpdateEnabled] != "bool") do={ :set AutoUpdateEnabled true; }
+:if ([:typeof $AutoUpdateInterval] != "str") do={ :set AutoUpdateInterval "1h"; }
+:if ([:typeof $AutoUpdateNotify] != "bool") do={ :set AutoUpdateNotify true; }
+
+# Silent mode detection
+:local SilentMode false;
+:local JobName [ :jobname ];
+:if ($JobName ~ "scheduler") do={ :set SilentMode true; }
+
+# Local script prefix detection
 :local LocalPrefix "";
-
-# Auto-detect existing installation prefix
 :onerror DetectErr {
   :local ExistingScript [ /system/script/find where name~"bot-core" ];
   :if ([:len $ExistingScript] > 0) do={
@@ -43,29 +40,45 @@
     :local CorePos [:find $ExistingName "bot-core"];
     :if ([:typeof $CorePos] = "num" && $CorePos > 0) do={
       :set LocalPrefix [:pick $ExistingName 0 $CorePos];
-      :put ("Auto-detected prefix: " . $LocalPrefix);
     }
   }
 } do={ }
 
-:put "";
-:put "+===============================================================+";
-:put "|  ____  _   _ _____ _   _ _____  __                            |";
-:put "| |  _ \\| | | | ____| \\ | |_ _\\ \\/ /                            |";
-:put "| | |_) | |_| |  _| |  \\| || | \\  /                             |";
-:put "| |  __/|  _  | |___| |\\  || | /  \\                             |";
-:put "| |_|   |_| |_|_____|_| \\_|___/_/\\_\\                            |";
-:put "+---------------------------------------------------------------+";
-:put "|  TxMTC - Telegram x MikroTik Tunnel Controller Sub-Agent     |";
-:put "|  Crafted with love & frustration                             |";
-:put "+===============================================================+";
-:put "";
-:put ("  Source: " . $BaseURL);
-:if ([:len $LocalPrefix] > 0) do={ :put ("  Prefix: " . $LocalPrefix); }
-:put "";
+# Version check
+:local RemoteVersion "";
+:local UpdateAvailable false;
 
-# Script list: base name and relative file path (order matters - core modules first!)
-# Format: "script-name"="relative/path.rsc"
+:onerror VersionErr {
+  :local VersionData ([ /tool/fetch check-certificate=yes-without-crl $VersionURL output=user as-value ]->"data");
+  :set RemoteVersion "";
+  :for I from=0 to=([:len $VersionData] - 1) do={
+    :local Char [:pick $VersionData $I ($I + 1)];
+    :if ($Char ~ "[0-9.]") do={ :set RemoteVersion ($RemoteVersion . $Char); }
+  }
+  :if ($RemoteVersion != $TxMTCVersion && [:len $RemoteVersion] > 0) do={ :set UpdateAvailable true; }
+} do={
+  :if ($SilentMode = false) do={ :put ("Version check failed: " . $VersionErr); }
+  :log warning ("update-scripts - Version check failed: " . $VersionErr);
+}
+
+# Exit if no update needed
+:if ($UpdateAvailable = false && $SilentMode = true) do={ :log debug "update-scripts - No updates"; :error "No updates"; }
+:if ($UpdateAvailable = false && $SilentMode = false) do={
+  :put "+===============================================================+";
+  :put "|  TxMTC - Up to date!                                          |";
+  :put ("  Current: " . $TxMTCVersion . " | Remote: " . $RemoteVersion);
+  :put "+===============================================================+";
+  :error "No updates";
+}
+
+# Update scripts
+:if ($SilentMode = false) do={
+  :put "+===============================================================+";
+  :put ("  Updating: " . $TxMTCVersion . " -> " . $RemoteVersion);
+  :put "+===============================================================+";
+}
+:log info ("update-scripts - Updating from " . $TxMTCVersion . " to " . $RemoteVersion);
+
 :local ScriptList {
   "bot-config"="bot-config.rsc";
   "modules/shared-functions"="modules/shared-functions.rsc";
@@ -81,7 +94,7 @@
   "modules/custom-commands"="modules/custom-commands.rsc";
   "modules/wireless-monitoring"="modules/wireless-monitoring.rsc";
   "modules/daily-summary"="modules/daily-summary.rsc";
-  "set-credentials"="set-credentials.rsc"
+  "update-scripts"="update-scripts.rsc"
 };
 
 :local UpdateCount 0;
@@ -91,64 +104,84 @@
 :foreach ScriptItem,FilePath in=$ScriptList do={
   :local URL ($BaseURL . "/" . $FilePath);
   :local FullScriptName ($LocalPrefix . $ScriptItem);
-  :put ("Processing: " . $FullScriptName);
+  :if ($SilentMode = false) do={ :put ("Processing: " . $FullScriptName); }
 
   :onerror FetchError {
     :local ScriptContent ([ /tool/fetch check-certificate=yes-without-crl $URL output=user as-value ]->"data");
-
     :if ([:len $ScriptContent] > 100) do={
-      # Try to find existing script with exact name or wildcard match
       :local ExistingScript [ /system/script/find where name=$FullScriptName ];
-
-      # If not found, try wildcard search for scripts ending with this name
-      :if ([:len $ExistingScript] = 0) do={
-        :local WildcardPattern (".*" . $ScriptItem . "\$");
-        :set ExistingScript [ /system/script/find where name~$WildcardPattern ];
-      }
-
+      :if ([:len $ExistingScript] = 0) do={ :set ExistingScript [ /system/script/find where name~$ScriptItem ]; }
       :if ([:len $ExistingScript] > 0) do={
-        # Update first matching script
         :local TargetScript [:pick $ExistingScript 0];
-        :local ActualName [ /system/script/get $TargetScript name ];
         /system/script/set $TargetScript source=$ScriptContent;
-        :put ("  Updated: " . $ActualName);
+        :if ($SilentMode = false) do={ :put ("  Updated: " . $FullScriptName); }
         :set UpdateCount ($UpdateCount + 1);
       } else={
-        /system/script/add name=$FullScriptName owner=admin \
-          policy=ftp,read,write,policy,test,password,sniff,sensitive,romon \
-          source=$ScriptContent;
-        :put ("  Created: " . $FullScriptName);
+        /system/script/add name=$FullScriptName owner=admin policy=ftp,read,write,policy,test,password,sniff,sensitive,romon source=$ScriptContent;
+        :if ($SilentMode = false) do={ :put ("  Created: " . $FullScriptName); }
         :set CreateCount ($CreateCount + 1);
       }
     } else={
-      :put ("  FAILED: Empty or invalid content");
+      :if ($SilentMode = false) do={ :put ("  FAILED: Empty content"); }
       :set FailCount ($FailCount + 1);
     }
   } do={
-    :put ("  FAILED: " . $FetchError);
+    :if ($SilentMode = false) do={ :put ("  FAILED: " . $FetchError); }
     :set FailCount ($FailCount + 1);
   }
 }
 
-:put "";
-:put "+---------------------------------------------------------------+";
-:put ("| Created: " . $CreateCount . " | Updated: " . $UpdateCount . " | Failed: " . $FailCount);
-:put "+---------------------------------------------------------------+";
+:if ($FailCount = 0) do={ :set TxMTCVersion $RemoteVersion; }
 
-:if ($FailCount = 0) do={
-  :put "";
-  :put "  SUCCESS! Configure your bot:";
-  :put "";
-  :put "  :global TelegramTokenId \"YOUR_BOT_TOKEN\"";
-  :put "  :global TelegramChatId \"YOUR_CHAT_ID\"";
-  :put "  :global TelegramChatIdsTrusted \"YOUR_CHAT_ID\"";
-  :put "  :global BotConfigReady true";
-  :put "";
-  :put "  Then: /system script run bot-config";
-  :put "  Test: /system script run bot-core";
-  :put "";
-  :put "  --- TxMTC by P\CC\B6h\CC\B6e\CC\B6n\CC\B6i\CC\B6x\CC\B6 ---";
-} else={
-  :put "";
-  :put "  Some scripts failed. Check network connectivity.";
+# Clear module caches
+:global SharedFunctionsLoaded; :set SharedFunctionsLoaded;
+:global TelegramAPILoaded; :set TelegramAPILoaded;
+:global SecurityModuleLoaded; :set SecurityModuleLoaded;
+:global ScriptRegistryLoaded; :set ScriptRegistryLoaded;
+:global InteractiveMenuLoaded; :set InteractiveMenuLoaded;
+:global UserSettingsLoaded; :set UserSettingsLoaded;
+:global ScriptDiscoveryLoaded; :set ScriptDiscoveryLoaded;
+
+# Results
+:if ($SilentMode = false) do={
+  :put "+---------------------------------------------------------------+";
+  :put ("| Updated: " . $UpdateCount . " | Created: " . $CreateCount . " | Failed: " . $FailCount);
+  :put ("| Version: " . $TxMTCVersion);
+  :put "+---------------------------------------------------------------+";
+}
+:log info ("update-scripts - Complete: " . $UpdateCount . " updated, " . $CreateCount . " created, " . $FailCount . " failed");
+
+# Telegram notification
+:if ($AutoUpdateNotify = true && $FailCount = 0 && ($UpdateCount + $CreateCount) > 0) do={
+  :global SendTelegram2;
+  :global TelegramChatId;
+  :if ([:typeof $SendTelegram2] != "nothing" && [:typeof $TelegramChatId] = "str") do={
+    $SendTelegram2 ({chatid=$TelegramChatId; silent=true; subject="TxMTC Auto-Update"; message=("Updated to v" . $TxMTCVersion)});
+  }
+}
+
+# Setup auto-update scheduler
+:global SetupAutoUpdate do={
+  :global AutoUpdateInterval;
+  :if ([:typeof $AutoUpdateInterval] != "str") do={ :set AutoUpdateInterval "1h"; }
+  :local ExistingSched [ /system/scheduler/find where name="txmtc-auto-update" ];
+  :if ([:len $ExistingSched] > 0) do={ /system/scheduler/remove $ExistingSched; }
+  /system/scheduler/add name="txmtc-auto-update" interval=$AutoUpdateInterval on-event="/system script run update-scripts" start-time=startup comment="TxMTC Auto-Update";
+  :log info ("update-scripts - Auto-update scheduler set to " . $AutoUpdateInterval);
+  :return true;
+}
+
+:global DisableAutoUpdate do={
+  :local ExistingSched [ /system/scheduler/find where name="txmtc-auto-update" ];
+  :if ([:len $ExistingSched] > 0) do={ /system/scheduler/remove $ExistingSched; :log info "update-scripts - Auto-update disabled"; :return true; }
+  :return false;
+}
+
+# Auto-setup scheduler on first run
+:if ($AutoUpdateEnabled = true) do={
+  :local ExistingSched [ /system/scheduler/find where name="txmtc-auto-update" ];
+  :if ([:len $ExistingSched] = 0) do={
+    [$SetupAutoUpdate];
+    :if ($SilentMode = false) do={ :put ("  Auto-update scheduler created (interval: " . $AutoUpdateInterval . ")"); }
+  }
 }
