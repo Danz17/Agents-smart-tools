@@ -59,6 +59,34 @@
   :global SendTelegram2;
   :global FormatNumber;
   :global ParseCSV;
+  :global SaveBotState;
+  :global LoadBotState;
+  :global EditTelegramMessage;
+  :global CertificateAvailable;
+
+  # ============================================================================
+  # LOAD PERSISTED MONITORING STATE
+  # ============================================================================
+
+  :global MonitoringAlertMsgIds;
+  :if ([:typeof $MonitoringAlertMsgIds] != "array") do={
+    :local LoadedState [$LoadBotState "monitoring-alerts"];
+    :if ([:typeof $LoadedState] = "array") do={
+      :set MonitoringAlertMsgIds $LoadedState;
+    } else={
+      :set MonitoringAlertMsgIds ({});
+    }
+  }
+
+  # Load interface down state from persistent storage
+  :if ([:typeof $CheckHealthInterfaceDown] != "array") do={
+    :local LoadedIfState [$LoadBotState "interface-down-state"];
+    :if ([:typeof $LoadedIfState] = "array") do={
+      :set CheckHealthInterfaceDown $LoadedIfState;
+    } else={
+      :set CheckHealthInterfaceDown ({});
+    }
+  }
 
   # Check if monitoring is enabled
   :if ($EnableAutoMonitoring != true) do={
@@ -230,9 +258,9 @@
   } do={ :log debug ($ScriptName . " - No voltage sensor available"); }
 
   # ============================================================================
-  # INTERFACE MONITORING
+  # INTERFACE MONITORING (with persistent state and smart alerts)
   # ============================================================================
-  
+
   :if ([:len $MonitorInterfaces] > 0) do={
     # Parse interface list
     :local InterfaceList;
@@ -250,58 +278,63 @@
       }
       :if ([:len $Current] > 0) do={ :set ($InterfaceList->[:len $InterfaceList]) $Current; }
     }
-    
-    # Initialize interface down tracking
-    :if ([:typeof $CheckHealthInterfaceDown] != "array") do={
-      :set CheckHealthInterfaceDown ({});
-    }
-    
+
+    :local StateChanged false;
+
     :foreach IntName in=$InterfaceList do={
       :onerror IntErr {
         :local IntFound [/interface/find where name=$IntName];
         :if ([:len $IntFound] = 0) do={
           :log debug ($ScriptName . " - Interface not found: " . $IntName);
-          # Remove from tracking if interface doesn't exist
-          :if ([:typeof ($CheckHealthInterfaceDown->$IntName)] != "nothing") do={
-            :set ($CheckHealthInterfaceDown->$IntName) "";
-          }
         } else={
           :local Int [ /interface/get $IntFound ];
           :local IsDisabled ($Int->"disabled");
           :local IsRunning ($Int->"running");
           :local WasDown ($CheckHealthInterfaceDown->$IntName);
-          
-          # Only alert if interface is enabled but not running (should be up but is down)
+
+          # Only alert if interface is enabled but not running
           :local IsDown ($IsDisabled = false && $IsRunning = false);
-          
+
           # Alert if interface just went down (wasn't down before)
           :if ($IsDown = true && $WasDown != true) do={
-            $SendTelegram2 ({ silent=false; \
-              subject="🔌 Interface Down Alert"; \
-              message=("Interface " . $IntName . " on " . $Identity . " is down!\n\nStatus: Enabled but not running.") });
+            :local MsgId [$SendTelegram2 ({ silent=false; \
+              subject="🔌 Interface Down"; \
+              message=("Interface *" . $IntName . "* is down\n⏰ " . [/system clock get time]) })];
+            # Store message ID for potential editing
+            :set ($MonitoringAlertMsgIds->("if_" . $IntName)) $MsgId;
             :log warning ($ScriptName . " - Interface down: " . $IntName);
             :set ($CheckHealthInterfaceDown->$IntName) true;
+            :set StateChanged true;
           }
-          
-          # Alert recovery if interface came back up (was down before)
+
+          # Alert recovery - edit existing message or send recovery
           :if ($IsDown = false && $WasDown = true) do={
-            $SendTelegram2 ({ silent=true; \
-              subject="✅ Interface Recovered"; \
-              message=("Interface " . $IntName . " on " . $Identity . " is back up.") });
+            :local OldMsgId ($MonitoringAlertMsgIds->("if_" . $IntName));
+            :if ([:len $OldMsgId] > 0) do={
+              # Try to edit the old alert message
+              :local EditResult [$EditTelegramMessage $TelegramChatId $OldMsgId \
+                ("✅ *Interface Recovered*\n\nInterface *" . $IntName . "* is back up\n⏰ " . [/system clock get time])];
+              :set ($MonitoringAlertMsgIds->("if_" . $IntName)) "";
+            } else={
+              # Send new recovery message if no old message to edit
+              $SendTelegram2 ({ silent=true; \
+                subject="✅ Interface Recovered"; \
+                message=("Interface *" . $IntName . "* is back up\n⏰ " . [/system clock get time]) });
+            }
             :log info ($ScriptName . " - Interface recovered: " . $IntName);
             :set ($CheckHealthInterfaceDown->$IntName) false;
-          }
-          
-          # Update state
-          :if ($IsDown = true) do={
-            :set ($CheckHealthInterfaceDown->$IntName) true;
-          } else={
-            :set ($CheckHealthInterfaceDown->$IntName) false;
+            :set StateChanged true;
           }
         }
-      } do={ 
+      } do={
         :log debug ($ScriptName . " - Error checking interface: " . $IntName);
       }
+    }
+
+    # Save state if changed
+    :if ($StateChanged = true) do={
+      [$SaveBotState "interface-down-state" $CheckHealthInterfaceDown];
+      [$SaveBotState "monitoring-alerts" $MonitoringAlertMsgIds];
     }
   }
 

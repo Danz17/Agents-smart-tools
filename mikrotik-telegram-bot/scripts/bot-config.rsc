@@ -20,7 +20,7 @@
 # Example: "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
 :global TelegramTokenId
 :if ([:typeof $TelegramTokenId] != "str" || [:len $TelegramTokenId] < 10) do={
-  :set TelegramTokenId "YOUR_BOT_TOKEN_HERE"
+  :set TelegramTokenId "8509387914:AAHdfl4A6Dgu1N0y1UfUtBkTN0SKqM7sfPs"
 }
 
 # Your personal chat ID (REQUIRED)
@@ -28,7 +28,7 @@
 # Example: "987654321" or "-987654321" for groups
 :global TelegramChatId
 :if ([:typeof $TelegramChatId] != "str" || [:len $TelegramChatId] < 5) do={
-  :set TelegramChatId "YOUR_CHAT_ID_HERE"
+  :set TelegramChatId "579243496"
 }
 
 # List of trusted user IDs who can control the bot
@@ -36,7 +36,7 @@
 # Add more users by separating with semicolons: ("id1";"id2";"@username")
 :global TelegramChatIdsTrusted
 :if ([:typeof $TelegramChatIdsTrusted] = "nothing" || [:len $TelegramChatIdsTrusted] = 0) do={
-  :set TelegramChatIdsTrusted "YOUR_CHAT_ID_HERE"
+  :set TelegramChatIdsTrusted "579243496"
 }
 
 # Thread ID for topic groups (optional)

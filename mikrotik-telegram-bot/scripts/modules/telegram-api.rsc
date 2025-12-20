@@ -500,6 +500,63 @@
 }
 
 # ============================================================================
+# DELETE TELEGRAM MESSAGE
+# ============================================================================
+
+:global DeleteTelegramMessage do={
+  :local ChatId [ :tostr $1 ];
+  :local MessageId [ :tostr $2 ];
+
+  :global TelegramTokenId;
+  :global CertificateAvailable;
+
+  :if ([:len $MessageId] = 0 || $MessageId = "0") do={
+    :return false;
+  }
+
+  :local DeleteUrl ("https://api.telegram.org/bot" . $TelegramTokenId . "/deleteMessage");
+  :local HTTPData ("chat_id=" . $ChatId . "&message_id=" . $MessageId);
+
+  :onerror DelErr {
+    :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
+      /tool/fetch check-certificate=no output=none http-method=post $DeleteUrl http-data=$HTTPData;
+    } else={
+      /tool/fetch check-certificate=yes-without-crl output=none http-method=post $DeleteUrl http-data=$HTTPData;
+    }
+    :return true;
+  } do={
+    :log debug ("telegram-api - DeleteTelegramMessage failed: " . $DelErr);
+    :return false;
+  }
+}
+
+# ============================================================================
+# SEND OR UPDATE MESSAGE (Smart - edits if message ID provided)
+# ============================================================================
+
+:global SendOrUpdateMessage do={
+  :local ChatId [ :tostr $1 ];
+  :local Text [ :tostr $2 ];
+  :local ExistingMsgId [ :tostr $3 ];
+  :local KeyboardJSON [ :tostr $4 ];
+
+  :global EditTelegramMessage;
+  :global SendTelegram2;
+
+  # If we have an existing message ID, try to edit it
+  :if ([:len $ExistingMsgId] > 0 && $ExistingMsgId != "0") do={
+    :local EditResult [$EditTelegramMessage $ChatId $ExistingMsgId $Text $KeyboardJSON];
+    :if ($EditResult = true) do={
+      :return $ExistingMsgId;
+    }
+  }
+
+  # Otherwise send new message
+  :local NewMsgId [$SendTelegram2 ({ chatid=$ChatId; subject=""; message=$Text; silent=true })];
+  :return $NewMsgId;
+}
+
+# ============================================================================
 # INITIALIZATION FLAG
 # ============================================================================
 
