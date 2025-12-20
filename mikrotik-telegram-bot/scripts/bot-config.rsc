@@ -191,6 +191,88 @@
 :global EnableScriptDiscovery true
 
 # ============================================================================
+# NETWATCH MONITORING
+# ============================================================================
+
+# Enable netwatch host/service monitoring
+:global EnableNetwatchMonitor true
+
+# Number of failed checks before alerting
+:global NetwatchDownThreshold 3
+
+# Repeat down alerts every N checks
+:global NetwatchAlertRepeat 60
+
+# ============================================================================
+# ROUTEROS UPDATE CHECKER
+# ============================================================================
+
+# Enable RouterOS update notifications
+:global EnableUpdateChecker true
+
+# Update channel: stable, testing, development
+:global UpdateChannel "stable"
+
+# Automatically install patch updates
+:global AutoInstallPatches false
+
+# ============================================================================
+# DHCP TO DNS SYNC
+# ============================================================================
+
+# Enable automatic DNS records from DHCP leases
+:global EnableDHCPtoDNS true
+
+# Domain suffix for DNS records
+:global DHCPDNSDomain "lan.local"
+
+# Extra name component (optional)
+:global DHCPDNSNameExtra ""
+
+# ============================================================================
+# LOG MONITORING
+# ============================================================================
+
+# Enable log forwarding to Telegram
+:global EnableLogMonitor true
+
+# Topics to monitor (comma-separated)
+:global LogMonitorTopics "critical,error,warning"
+
+# Message patterns to exclude
+:global LogMonitorExclude ""
+
+# Max notifications per minute
+:global LogMonitorMaxPerMinute 10
+
+# ============================================================================
+# SMS ACTIONS (LTE)
+# ============================================================================
+
+# Enable SMS command handler
+:global EnableSMSActions false
+
+# Authorized phone numbers for SMS commands
+:global SMSAuthorizedNumbers ({})
+
+# SMS action mappings
+:global SMSActions ({
+  "status"="/system script run bot-core";
+  "reboot"="/system reboot";
+  "backup"="/system backup save name=sms-backup"
+})
+
+# ============================================================================
+# CERTIFICATE MONITORING
+# ============================================================================
+
+# Enable certificate expiry monitoring
+:global EnableCertMonitor true
+
+# Alert N days before certificate expires
+:global CertExpiryDays 30
+
+# ============================================================================
 # COMMAND EXECUTION SETTINGS
 # ============================================================================
 

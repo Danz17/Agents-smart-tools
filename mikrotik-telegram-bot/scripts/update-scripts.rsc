@@ -100,6 +100,12 @@
   "modules/custom-commands"="modules/custom-commands.rsc";
   "modules/wireless-monitoring"="modules/wireless-monitoring.rsc";
   "modules/daily-summary"="modules/daily-summary.rsc";
+  "modules/netwatch-monitor"="modules/netwatch-monitor.rsc";
+  "modules/update-checker"="modules/update-checker.rsc";
+  "modules/dhcp-to-dns"="modules/dhcp-to-dns.rsc";
+  "modules/log-monitor"="modules/log-monitor.rsc";
+  "modules/sms-actions"="modules/sms-actions.rsc";
+  "modules/cert-monitor"="modules/cert-monitor.rsc";
   "set-credentials"="set-credentials.rsc";
   "load-credentials-from-file"="load-credentials-from-file.rsc";
   "update-scripts"="update-scripts.rsc"
@@ -149,6 +155,12 @@
 :global InteractiveMenuLoaded; :set InteractiveMenuLoaded;
 :global UserSettingsLoaded; :set UserSettingsLoaded;
 :global ScriptDiscoveryLoaded; :set ScriptDiscoveryLoaded;
+:global NetwatchMonitorLoaded; :set NetwatchMonitorLoaded;
+:global UpdateCheckerLoaded; :set UpdateCheckerLoaded;
+:global DHCPtoDNSLoaded; :set DHCPtoDNSLoaded;
+:global LogMonitorLoaded; :set LogMonitorLoaded;
+:global SMSActionsLoaded; :set SMSActionsLoaded;
+:global CertMonitorLoaded; :set CertMonitorLoaded;
 
 # Results
 :if ($SilentMode = false) do={
