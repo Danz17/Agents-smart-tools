@@ -288,15 +288,15 @@
 
 :global SearchScripts do={
   :local Query [ :tostr $1 ];
-  :local QueryLower [:tolower $Query];
+  # Query used directly (case-sensitive)
   :local Result ({});
   
   :foreach ScriptId,ScriptData in=$ScriptRegistry do={
-    :local NameLower [:tolower ($ScriptData->"name")];
-    :local DescLower [:tolower ($ScriptData->"description")];
-    :local CatLower [:tolower ($ScriptData->"category")];
+    :local ScriptName ($ScriptData->"name");
+    :local ScriptDesc ($ScriptData->"description");
+    :local ScriptCat ($ScriptData->"category");
     
-    :if ($NameLower ~ $QueryLower || $DescLower ~ $QueryLower || $CatLower ~ $QueryLower) do={
+    :if ($ScriptName ~ $Query || $ScriptDesc ~ $Query || $ScriptCat ~ $Query || $ScriptId ~ $Query) do={
       :set ($Result->$ScriptId) $ScriptData;
     }
   }

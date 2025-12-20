@@ -308,10 +308,9 @@
     :if ([:typeof $SpacePos] = "num") do={
       :set CmdName [:pick $CmdName 0 $SpacePos];
     }
-    :local BaseCmd [:tolower $CmdName];
-    
-    :if ([:typeof ($CustomCommands->$BaseCmd)] != "nothing") do={
-      :return ($CustomCommands->$BaseCmd);
+    # Check command alias (case-sensitive)
+    :if ([:typeof ($CustomCommands->$CmdName)] != "nothing") do={
+      :return ($CustomCommands->$CmdName);
     }
   }
   :return $Command;

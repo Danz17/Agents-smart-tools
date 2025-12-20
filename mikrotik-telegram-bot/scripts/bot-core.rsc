@@ -219,8 +219,45 @@
 
   :local UpdateID 0;
   :local Uptime [ /system/resource/get uptime ];
-  
-  :foreach Update in=($JSON->"result") do={
+  :local Results ($JSON->"result");
+  :local QueueLen [:len $Results];
+
+  # Queue management: if more than 3 pending messages, offer to clear
+  :if ($QueueLen > 3) do={
+    :local LastIdx ($QueueLen - 1);
+    :local LastUpdate ($Results->$LastIdx);
+    :local LastMessage ($LastUpdate->"message");
+    :local LastChat ($LastMessage->"chat");
+    :local LastCommand ($LastMessage->"text");
+    :local LastThreadId "";
+    :if (($LastMessage->"is_topic_message") = true) do={
+      :set LastThreadId ($LastMessage->"message_thread_id");
+    }
+
+    # Check if latest message is the clear command
+    :if ($LastCommand = "/clear" || $LastCommand = "/clearqueue") do={
+      :local LastUpdateID ($LastUpdate->"update_id");
+      :set TelegramChatOffset ({ ($LastUpdateID + 1); ($LastUpdateID + 1); ($LastUpdateID + 1) });
+      $SendTelegram2 ({ chatid=($LastChat->"id"); silent=false; \
+        replyto=($LastMessage->"message_id"); threadid=$LastThreadId; \
+        subject="\E2\9A\A1 TxMTC | Queue Cleared"; \
+        message=("\F0\9F\97\91 Cleared " . ($QueueLen - 1) . " pending messages.\nReady for new commands!") });
+      :log info ($ScriptName . " - Queue cleared by user, skipped " . ($QueueLen - 1) . " messages");
+      :set ExitOK true;
+      :error false;
+    }
+
+    # Not a clear command - notify about queue and process only latest
+    $SendTelegram2 ({ chatid=($LastChat->"id"); silent=true; threadid=$LastThreadId; \
+      subject="\E2\9A\A1 TxMTC | Queue Notice"; \
+      message=("\F0\9F\93\AC " . $QueueLen . " pending messages in queue.\nProcessing latest only.\n\nSend `/clear` to empty queue.") });
+    :log info ($ScriptName . " - Large queue (" . $QueueLen . "), processing latest only");
+
+    # Process only the latest message
+    :set Results ({ $LastUpdate });
+  }
+
+  :foreach Update in=$Results do={
     :set UpdateID ($Update->"update_id");
     :log debug ($ScriptName . " - Processing update " . $UpdateID);
 

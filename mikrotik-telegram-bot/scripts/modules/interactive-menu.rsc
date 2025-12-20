@@ -79,7 +79,14 @@
   :local CurrentRow ({});
   :local RowCount 0;
   :foreach Cat in=$Categories do={
-    :local CatName [:toupper [:pick $Cat 0 1]] . [:pick $Cat 1 [:len $Cat]];
+    :local CatName $Cat;
+    # Use display names for categories
+    :if ($Cat = "monitoring") do={ :set CatName "Monitoring"; }
+    :if ($Cat = "backup") do={ :set CatName "Backup"; }
+    :if ($Cat = "utilities") do={ :set CatName "Utilities"; }
+    :if ($Cat = "parental-control") do={ :set CatName "Parental Control"; }
+    :if ($Cat = "network-management") do={ :set CatName "Network Management"; }
+    :if ($Cat = "misc") do={ :set CatName "Misc"; }
     :local Emoji "";
     :if ($Cat = "monitoring") do={ :set Emoji "📊"; }
     :if ($Cat = "backup") do={ :set Emoji "💾"; }
@@ -175,7 +182,7 @@
   :local Buttons ({});
   
   :if ([:len $Scripts] = 0) do={
-    :local NoScriptsText ("*" . [:toupper $Category] . " Scripts*\n\nNo scripts available in this category.");
+    :local NoScriptsText ("*" . $Category . " Scripts*\n\nNo scripts available in this category.");
     :set ($Buttons->[:len $Buttons]) ({
       {text="🔙 Back"; callback_data="menu:main"}
     });
@@ -220,7 +227,14 @@
     {text="🔙 Back"; callback_data="menu:main"}
   });
   
-  :local CategoryName [:toupper [:pick $Category 0 1]] . [:pick $Category 1 [:len $Category]];
+  :local CategoryName $Category;
+  # Use display names for categories
+  :if ($Category = "monitoring") do={ :set CategoryName "Monitoring"; }
+  :if ($Category = "backup") do={ :set CategoryName "Backup"; }
+  :if ($Category = "utilities") do={ :set CategoryName "Utilities"; }
+  :if ($Category = "parental-control") do={ :set CategoryName "Parental Control"; }
+  :if ($Category = "network-management") do={ :set CategoryName "Network Management"; }
+  :if ($Category = "misc") do={ :set CategoryName "Misc"; }
   :local MenuText ("*" . $CategoryName . " Scripts*\n\nSelect a script:");
   
   :local KeyboardJSON [$CreateInlineKeyboard $Buttons];
