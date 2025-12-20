@@ -62,17 +62,19 @@
 }
 
 # Exit if no update needed
-:if ($UpdateAvailable = false && $SilentMode = true) do={ 
+:if ($UpdateAvailable = false && $SilentMode = true) do={
   :log debug "update-scripts - No updates available";
-  :return;
+  :return "no-updates";
 }
 :if ($UpdateAvailable = false && $SilentMode = false) do={
   :put "+===============================================================+";
   :put "|  TxMTC - Up to date!                                          |";
-  :put ("  Current: " . $TxMTCVersion . " | Remote: " . $RemoteVersion);
+  :local VersionInfo ("  Current: " . $TxMTCVersion);
+  :if ([:len $RemoteVersion] > 0) do={ :set VersionInfo ($VersionInfo . " | Remote: " . $RemoteVersion); }
+  :put $VersionInfo;
   :put "+===============================================================+";
   :put "";
-  :return;
+  :return "no-updates";
 }
 
 # Update scripts
@@ -172,7 +174,7 @@
   :if ([:typeof $AutoUpdateInterval] != "str") do={ :set AutoUpdateInterval "1h"; }
   :local ExistingSched [ /system/scheduler/find where name="txmtc-auto-update" ];
   :if ([:len $ExistingSched] > 0) do={ /system/scheduler/remove $ExistingSched; }
-  /system/scheduler/add name="txmtc-auto-update" interval=$AutoUpdateInterval on-event="/system script run update-scripts" start-time=startup comment="TxMTC Auto-Update";
+  /system/scheduler/add name="txmtc-auto-update" interval=$AutoUpdateInterval on-event="system script run update-scripts" start-time=startup comment="TxMTC Auto-Update";
   :log info ("update-scripts - Auto-update scheduler set to " . $AutoUpdateInterval);
   :return true;
 }
