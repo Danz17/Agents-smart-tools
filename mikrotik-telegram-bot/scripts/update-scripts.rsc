@@ -2,7 +2,7 @@
 # TxMTC - Telegram x MikroTik Tunnel Controller Sub-Agent
 # Script Updater / Auto-Updater
 # GitHub: https://github.com/Danz17/Agents-smart-tools
-# Author: Phenix | Version: 2.1.1
+# Author: Phenix | Version: 2.3.0
 
 :local ScriptName "update-scripts";
 

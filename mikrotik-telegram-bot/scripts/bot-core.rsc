@@ -79,6 +79,14 @@
     }
   }
 
+  # Import Claude relay module
+  :global ClaudeRelayLoaded;
+  :if ($ClaudeRelayLoaded != true) do={
+    :onerror ModErr { /system script run "modules/claude-relay"; } do={
+      :log warning ($ScriptName . " - Could not load claude-relay module");
+    }
+  }
+
   # ============================================================================
   # IMPORT GLOBALS
   # ============================================================================
@@ -130,6 +138,8 @@
   :global AutoCleanupMessages;
   :global CleanupOldMessages;
   :global GetUserNotificationStyle;
+  :global ProcessSmartCommand;
+  :global ClaudeRelayAvailable;
 
   # ============================================================================
   # VALIDATE CONFIGURATION
@@ -593,8 +603,34 @@
           }
           
           :if ($Done = false) do={
-            # Process custom command aliases
-            :if ([:typeof $ProcessCustomCommand] = "array") do={
+            # Process smart commands via Claude relay (if enabled and command looks like natural language)
+            :global ClaudeRelayEnabled;
+            :local IsSmartCommand false;
+            :if ([:typeof $ClaudeRelayEnabled] = "bool" && $ClaudeRelayEnabled = true) do={
+              # Detect smart commands: not starting with "/" or contains natural language patterns
+              :if ([:pick $Command 0 1] != "/" || $Command ~ "^(show|block|unblock|what|how|list|get|find|check)") do={
+                :if ([:typeof $ProcessSmartCommand] = "array") do={
+                  :local SmartResult [$ProcessSmartCommand $Command];
+                  :if (($SmartResult->"success") = true) do={
+                    :set Command ($SmartResult->"routeros_command");
+                    :set IsSmartCommand true;
+                    :log info ($ScriptName . " - Smart command processed: \"" . ($SmartResult->"original_command") . "\" -> \"" . $Command . "\"");
+                  } else={
+                    # Smart command processing failed, fall back to direct execution
+                    :local ErrorMsg ($SmartResult->"error");
+                    :log warning ($ScriptName . " - Smart command failed: " . $ErrorMsg);
+                    $SendTelegram2 ({ chatid=($Chat->"id"); silent=false; \
+                      replyto=($Message->"message_id"); threadid=$ThreadId; \
+                      subject="⚡ TxMTC | Smart Command"; \
+                      message=("Could not process smart command:\n\n" . $Command . "\n\nError: " . $ErrorMsg . "\n\nTry using RouterOS command syntax instead.") });
+                    :set Done true;
+                  }
+                }
+              }
+            }
+            
+            # Process custom command aliases (if not already processed as smart command)
+            :if ($Done = false && $IsSmartCommand = false && [:typeof $ProcessCustomCommand] = "array") do={
               :set Command [$ProcessCustomCommand $Command];
             }
             

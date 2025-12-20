@@ -1,0 +1,38 @@
+{
+  "service": {
+    "host": "0.0.0.0",
+    "port": 5000,
+    "max_workers": 10,
+    "request_timeout": 30
+  },
+  "claude": {
+    "mode": "anthropic",
+    "api_key": "YOUR_CLAUDE_API_KEY_HERE",
+    "api_url": "https://api.anthropic.com/v1/messages",
+    "model": "claude-3-5-sonnet-20241022"
+  },
+  "local_claude": {
+    "enabled": false,
+    "api_url": "http://localhost:11434/v1/messages",
+    "model": "claude"
+  },
+  "knowledge_base": {
+    "path": "claude-relay-knowledge.json",
+    "auto_reload": true
+  },
+  "security": {
+    "rate_limit": {
+      "enabled": true,
+      "max_requests_per_minute": 60
+    },
+    "allowed_ips": [],
+    "require_api_key": false
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "claude-relay.log",
+    "max_size_mb": 10,
+    "backup_count": 5
+  }
+}
+

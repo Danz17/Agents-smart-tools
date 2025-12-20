@@ -1,0 +1,126 @@
+{
+  "syntax_patterns": [
+    "/interface print [where <condition>]",
+    "/ip address print [where <condition>]",
+    "/ip firewall filter add chain=<chain> action=<action> [src-address=<ip>] [dst-address=<ip>]",
+    "/ip dhcp-server lease print [where <condition>]",
+    "/system resource print",
+    "/log print [where topics~\"<topic>\"]",
+    "/interface monitor-traffic [interface=<name>] [once]",
+    "/ip route print [where <condition>]",
+    "/ip dns print",
+    "/system package print",
+    "/system identity print",
+    "/system clock print"
+  ],
+  "common_operations": {
+    "show_interfaces": "/interface print stats",
+    "show_errors": "/interface print where status!=\"up\"",
+    "show_dhcp": "/ip dhcp-server lease print",
+    "show_firewall": "/ip firewall filter print",
+    "show_addresses": "/ip address print",
+    "show_routes": "/ip route print",
+    "show_dns": "/ip dns print",
+    "block_device": "/ip firewall filter add chain=forward src-address={ip} action=drop comment=\"Blocked via smart command\"",
+    "unblock_device": "/ip firewall filter remove [find where src-address={ip} and action=drop]",
+    "show_status": "/system resource print",
+    "show_logs": "/log print",
+    "show_traffic": "/interface monitor-traffic once",
+    "show_wireless": "/interface wireless registration-table print",
+    "show_version": "/system resource get version",
+    "show_uptime": "/system resource get uptime"
+  },
+  "safety_rules": {
+    "dangerous_commands": [
+      "/system reset-configuration",
+      "/system reset-configuration no-defaults=yes",
+      "/system package uninstall",
+      "/system reboot",
+      "/system shutdown",
+      "/file remove",
+      "/certificate remove"
+    ],
+    "read_only_safe": [
+      "/interface print",
+      "/ip address print",
+      "/ip dhcp-server lease print",
+      "/ip route print",
+      "/system resource print",
+      "/log print",
+      "/system identity print",
+      "/system clock print",
+      "/system package print"
+    ],
+    "requires_confirmation": [
+      "/system reboot",
+      "/system shutdown",
+      "/system package update install",
+      "/ip firewall filter remove",
+      "/ip route remove"
+    ]
+  },
+  "context_examples": [
+    {
+      "input": "show me all interfaces with errors",
+      "output": "/interface print where status!=\"up\""
+    },
+    {
+      "input": "block device 192.168.1.100",
+      "output": "/ip firewall filter add chain=forward src-address=192.168.1.100 action=drop comment=\"Blocked via smart command\""
+    },
+    {
+      "input": "what's using the most bandwidth?",
+      "output": "/interface monitor-traffic once"
+    },
+    {
+      "input": "show dhcp leases",
+      "output": "/ip dhcp-server lease print"
+    },
+    {
+      "input": "show firewall rules",
+      "output": "/ip firewall filter print"
+    },
+    {
+      "input": "show system status",
+      "output": "/system resource print"
+    },
+    {
+      "input": "show ip addresses",
+      "output": "/ip address print"
+    },
+    {
+      "input": "show recent logs",
+      "output": "/log print"
+    },
+    {
+      "input": "unblock 192.168.1.100",
+      "output": "/ip firewall filter remove [find where src-address=192.168.1.100 and action=drop]"
+    },
+    {
+      "input": "show wireless clients",
+      "output": "/interface wireless registration-table print"
+    }
+  ],
+  "command_patterns": {
+    "show": {
+      "interfaces": "/interface print",
+      "interface_errors": "/interface print where status!=\"up\"",
+      "dhcp": "/ip dhcp-server lease print",
+      "firewall": "/ip firewall filter print",
+      "addresses": "/ip address print",
+      "routes": "/ip route print",
+      "status": "/system resource print",
+      "logs": "/log print",
+      "wireless": "/interface wireless registration-table print"
+    },
+    "block": {
+      "device": "/ip firewall filter add chain=forward src-address={ip} action=drop comment=\"Blocked via smart command\"",
+      "ip": "/ip firewall filter add chain=forward src-address={ip} action=drop comment=\"Blocked via smart command\""
+    },
+    "unblock": {
+      "device": "/ip firewall filter remove [find where src-address={ip} and action=drop]",
+      "ip": "/ip firewall filter remove [find where src-address={ip} and action=drop]"
+    }
+  }
+}
+

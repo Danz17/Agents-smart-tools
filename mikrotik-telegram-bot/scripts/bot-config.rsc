@@ -273,6 +273,25 @@
 :global CertExpiryDays 30
 
 # ============================================================================
+# CLAUDE CODE RELAY NODE SETTINGS
+# ============================================================================
+
+# Enable Claude Code Relay for smart command processing
+# When enabled, natural language commands are processed via Claude API
+# and translated to RouterOS commands
+:global ClaudeRelayEnabled false
+
+# Claude relay service URL (Python service endpoint)
+# Example: "http://192.168.1.100:5000" or "https://claude-relay.example.com"
+:global ClaudeRelayURL "http://192.168.1.100:5000"
+
+# Request timeout for Claude relay service
+:global ClaudeRelayTimeout 10s
+
+# Claude API mode: "anthropic" (Anthropic API) or "local" (local Claude instance)
+:global ClaudeRelayMode "anthropic"
+
+# ============================================================================
 # COMMAND EXECUTION SETTINGS
 # ============================================================================
 

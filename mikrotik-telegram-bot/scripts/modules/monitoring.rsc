@@ -158,12 +158,12 @@
   :set CheckHealthCPUUtilization (($CheckHealthCPUUtilization * 4 + $CurrentCPU) / 5);
   
   :if ($CheckHealthCPUUtilization > ($MonitorCPUThreshold * 10) && $CheckHealthCPUUtilizationNotified != true) do={
-    $SendTelegram2 ({ silent=false; \
-      subject="⚠️ CPU Utilization Alert"; \
-      message=("CPU utilization on " . $Identity . " is high!\n\n" . \
-        "Average: " . ($CheckHealthCPUUtilization / 10) . "%\n" . \
-        "Threshold: " . $MonitorCPUThreshold . "%\n" . \
-        "Current: " . ($Resource->"cpu-load") . "%") });
+    :local CpuPercent [$FormatPercent $CheckHealthCPUUtilization];
+    :local ThresholdPercent [$FormatPercent ($MonitorCPUThreshold * 10)];
+    :local CurrentPercent [$FormatPercent (($Resource->"cpu-load") * 10)];
+    :local CpuMsg [$FormatMessage "CPU Utilization High" \
+      ("Current: " . $CurrentPercent . "\nAverage: " . $CpuPercent . "\nThreshold: " . $ThresholdPercent . "\n\n⚠️ System may be under heavy load.") "⚠️"];
+    $SendTelegram2 ({ silent=false; subject=""; message=$CpuMsg });
     :set CheckHealthCPUUtilizationNotified true;
     :log warning ($ScriptName . " - CPU utilization high: " . ($CheckHealthCPUUtilization / 10) . "%");
   }
@@ -187,12 +187,13 @@
   :local RAMPercent ($UsedRAM * 100 / $TotalRAM);
   
   :if ($RAMPercent >= $MonitorRAMThreshold && $CheckHealthRAMUtilizationNotified != true) do={
-    $SendTelegram2 ({ silent=false; \
-      subject="⚠️ RAM Utilization Alert"; \
-      message=("RAM utilization on " . $Identity . " is high!\n\n" . \
-        "Used: " . $RAMPercent . "%\n" . \
-        "Total: " . [$FormatNumber $TotalRAM 1024] . "B\n" . \
-        "Free: " . [$FormatNumber $FreeRAM 1024] . "B") });
+    :local RamPercent [$FormatPercent ($RAMPercent * 10)];
+    :local ThresholdPercent [$FormatPercent ($MonitorRAMThreshold * 10)];
+    :local TotalRam [$FormatBytes $TotalRAM];
+    :local FreeRam [$FormatBytes $FreeRAM];
+    :local RamMsg [$FormatMessage "RAM Utilization High" \
+      ("Used: " . $RamPercent . "\nThreshold: " . $ThresholdPercent . "\n\nTotal: " . $TotalRam . "\nFree: " . $FreeRam . "\n\n⚠️ Consider freeing up memory.") "⚠️"];
+    $SendTelegram2 ({ silent=false; subject=""; message=$RamMsg });
     :set CheckHealthRAMUtilizationNotified true;
     :log warning ($ScriptName . " - RAM utilization high: " . $RAMPercent . "%");
   }
@@ -216,12 +217,13 @@
   :local HDDPercent ($UsedHDD * 100 / $TotalHDD);
   
   :if ($HDDPercent >= $MonitorDiskThreshold && $CheckHealthDiskUtilizationNotified != true) do={
-    $SendTelegram2 ({ silent=false; \
-      subject="⚠️ Disk Usage Alert"; \
-      message=("Disk usage on " . $Identity . " is high!\n\n" . \
-        "Used: " . $HDDPercent . "%\n" . \
-        "Total: " . [$FormatNumber $TotalHDD 1024] . "B\n" . \
-        "Free: " . [$FormatNumber $FreeHDD 1024] . "B") });
+    :local DiskPercent [$FormatPercent ($HDDPercent * 10)];
+    :local ThresholdPercent [$FormatPercent ($MonitorDiskThreshold * 10)];
+    :local TotalDisk [$FormatBytes $TotalHDD];
+    :local FreeDisk [$FormatBytes $FreeHDD];
+    :local DiskMsg [$FormatMessage "Disk Usage High" \
+      ("Used: " . $DiskPercent . "\nThreshold: " . $ThresholdPercent . "\n\nTotal: " . $TotalDisk . "\nFree: " . $FreeDisk . "\n\n⚠️ Consider cleaning up old files.") "⚠️"];
+    $SendTelegram2 ({ silent=false; subject=""; message=$DiskMsg });
     :set CheckHealthDiskUtilizationNotified true;
     :log warning ($ScriptName . " - Disk usage high: " . $HDDPercent . "%");
   }
