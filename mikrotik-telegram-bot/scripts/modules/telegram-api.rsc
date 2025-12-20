@@ -424,6 +424,82 @@
 }
 
 # ============================================================================
+# EDIT TELEGRAM MESSAGE
+# ============================================================================
+
+:global EditTelegramMessage do={
+  :local ChatId [ :tostr $1 ];
+  :local MessageId [ :tostr $2 ];
+  :local Text [ :tostr $3 ];
+  :local KeyboardJSON [ :tostr $4 ];
+
+  :global TelegramTokenId;
+  :global UrlEncode;
+  :global CertificateAvailable;
+
+  :local EditUrl ("https://api.telegram.org/bot" . $TelegramTokenId . "/editMessageText");
+  :local HTTPData ("chat_id=" . $ChatId . \
+    "&message_id=" . $MessageId . \
+    "&text=" . [$UrlEncode $Text] . \
+    "&parse_mode=Markdown");
+
+  :if ([:len $KeyboardJSON] > 0) do={
+    :set HTTPData ($HTTPData . "&reply_markup=" . [$UrlEncode $KeyboardJSON]);
+  }
+
+  :onerror EditErr {
+    :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
+      /tool/fetch check-certificate=no output=none http-method=post $EditUrl http-data=$HTTPData;
+    } else={
+      /tool/fetch check-certificate=yes-without-crl output=none http-method=post $EditUrl http-data=$HTTPData;
+    }
+    :return true;
+  } do={
+    :log warning ("telegram-api - EditTelegramMessage failed: " . $EditErr);
+    :return false;
+  }
+}
+
+# ============================================================================
+# ANSWER CALLBACK QUERY
+# ============================================================================
+
+:global AnswerCallbackQuery do={
+  :local CallbackId [ :tostr $1 ];
+  :local Text [ :tostr $2 ];
+  :local ShowAlert $3;
+
+  :global TelegramTokenId;
+  :global UrlEncode;
+  :global CertificateAvailable;
+
+  :if ([:typeof $ShowAlert] != "bool") do={
+    :set ShowAlert false;
+  }
+
+  :local AnswerUrl ("https://api.telegram.org/bot" . $TelegramTokenId . "/answerCallbackQuery");
+  :local HTTPData ("callback_query_id=" . $CallbackId);
+
+  :if ([:len $Text] > 0) do={
+    :set HTTPData ($HTTPData . "&text=" . [$UrlEncode $Text]);
+  }
+  :if ($ShowAlert = true) do={
+    :set HTTPData ($HTTPData . "&show_alert=true");
+  }
+
+  :onerror AnswerErr {
+    :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
+      /tool/fetch check-certificate=no output=none http-method=post $AnswerUrl http-data=$HTTPData;
+    } else={
+      /tool/fetch check-certificate=yes-without-crl output=none http-method=post $AnswerUrl http-data=$HTTPData;
+    }
+    :return true;
+  } do={
+    :return false;
+  }
+}
+
+# ============================================================================
 # INITIALIZATION FLAG
 # ============================================================================
 

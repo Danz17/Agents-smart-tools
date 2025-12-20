@@ -417,6 +417,8 @@
         
         # Handle /scripts command
         :if ($Done = false && $Command ~ "^/scripts") do={
+          :global ToLower;
+          :global Capitalize;
           :local Category "";
           :local CmdParts ({});
           :local CurrentPart "";
@@ -435,12 +437,12 @@
             :set ($CmdParts->[:len $CmdParts]) $CurrentPart;
           }
           :if ([:len $CmdParts] > 1) do={
-            :set Category [:tolower ($CmdParts->1)];
+            :set Category [$ToLower ($CmdParts->1)];
           }
-          
+
           :if ([:len $Category] > 0 && [:typeof $ListScriptsByCategory] = "array") do={
             :local Scripts [$ListScriptsByCategory $Category];
-            :local ScriptList ("*Scripts in " . [:toupper [:pick $Category 0 1]] . [:pick $Category 1 [:len $Category]] . "*\n\n");
+            :local ScriptList ("*Scripts in " . [$Capitalize $Category] . "*\n\n");
             :if ([:len $Scripts] > 0) do={
               :foreach ScriptId,ScriptData in=$Scripts do={
                 :set ScriptList ($ScriptList . "• " . ($ScriptData->"name") . "\n");
@@ -459,7 +461,7 @@
             :local Categories [$GetCategories];
             :local CatList ("*Available Categories:*\n\n");
             :foreach Cat in=$Categories do={
-              :set CatList ($CatList . "• " . [:toupper [:pick $Cat 0 1]] . [:pick $Cat 1 [:len $Cat]] . "\n");
+              :set CatList ($CatList . "• " . [$Capitalize $Cat] . "\n");
             }
             :set CatList ($CatList . "\nUse `/scripts <category>` to list scripts.");
             $SendTelegram2 ({ chatid=($Chat->"id"); silent=true; \

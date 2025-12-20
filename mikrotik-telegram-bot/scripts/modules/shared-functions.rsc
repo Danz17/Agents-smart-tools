@@ -177,6 +177,20 @@
 }
 
 # ============================================================================
+# CERTIFICATE AVAILABLE CHECK
+# ============================================================================
+
+:global CertificateAvailable do={
+  :local CertName [ :tostr $1 ];
+  :if ([:len $CertName] = 0) do={ :return false; }
+  :onerror CertErr {
+    :local Certs [/certificate find where common-name~$CertName];
+    :if ([:len $Certs] > 0) do={ :return true; }
+  } do={}
+  :return false;
+}
+
+# ============================================================================
 # VALIDATE SYNTAX
 # ============================================================================
 
@@ -218,6 +232,61 @@
     }
   } do={}
   :return ({});
+}
+
+# ============================================================================
+# CASE CONVERSION - TOLOWER
+# ============================================================================
+
+:global ToLower do={
+  :local Str [:tostr $1];
+  :local Result "";
+  :local Upper "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  :local Lower "abcdefghijklmnopqrstuvwxyz";
+  :for I from=0 to=([:len $Str] - 1) do={
+    :local Char [:pick $Str $I ($I + 1)];
+    :local Pos [:find $Upper $Char];
+    :if ([:typeof $Pos] = "num") do={
+      :set Result ($Result . [:pick $Lower $Pos ($Pos + 1)]);
+    } else={
+      :set Result ($Result . $Char);
+    }
+  }
+  :return $Result;
+}
+
+# ============================================================================
+# CASE CONVERSION - TOUPPER
+# ============================================================================
+
+:global ToUpper do={
+  :local Str [:tostr $1];
+  :local Result "";
+  :local Upper "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  :local Lower "abcdefghijklmnopqrstuvwxyz";
+  :for I from=0 to=([:len $Str] - 1) do={
+    :local Char [:pick $Str $I ($I + 1)];
+    :local Pos [:find $Lower $Char];
+    :if ([:typeof $Pos] = "num") do={
+      :set Result ($Result . [:pick $Upper $Pos ($Pos + 1)]);
+    } else={
+      :set Result ($Result . $Char);
+    }
+  }
+  :return $Result;
+}
+
+# ============================================================================
+# CASE CONVERSION - CAPITALIZE (First letter uppercase)
+# ============================================================================
+
+:global Capitalize do={
+  :local Str [:tostr $1];
+  :if ([:len $Str] = 0) do={ :return ""; }
+  :global ToUpper;
+  :local First [$ToUpper [:pick $Str 0 1]];
+  :if ([:len $Str] = 1) do={ :return $First; }
+  :return ($First . [:pick $Str 1 [:len $Str]]);
 }
 
 # ============================================================================
