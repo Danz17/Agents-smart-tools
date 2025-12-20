@@ -118,7 +118,9 @@
   "modules/backup";
   "modules/custom-commands";
   "modules/wireless-monitoring";
-  "modules/daily-summary"
+  "modules/daily-summary";
+  "set-credentials";
+  "load-credentials-from-file"
 })
 
 :local ScriptsCreated 0

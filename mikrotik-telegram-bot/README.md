@@ -105,6 +105,8 @@ mikrotik-telegram-bot/
 │   ├── bot-core.rsc             # Main bot logic
 │   ├── update-scripts.rsc       # Installer/updater
 │   ├── deploy.rsc               # Deployment script
+│   ├── set-credentials.rsc     # Credential setup script
+│   ├── load-credentials-from-file.rsc  # Load from file
 │   └── modules/
 │       ├── telegram-api.rsc     # Telegram API
 │       ├── shared-functions.rsc # Utilities
@@ -121,7 +123,10 @@ mikrotik-telegram-bot/
 ├── README.md
 ├── QUICKSTART.md
 ├── FAQ.md
-└── CHANGELOG.md
+├── CHANGELOG.md
+├── CREDENTIALS.md              # Credentials management guide
+├── .env.example                # Credentials template (safe to commit)
+└── .env                        # Your credentials (⚠️ DO NOT COMMIT)
 ```
 
 ---

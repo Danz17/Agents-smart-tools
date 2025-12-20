@@ -62,13 +62,17 @@
 }
 
 # Exit if no update needed
-:if ($UpdateAvailable = false && $SilentMode = true) do={ :log debug "update-scripts - No updates"; :error "No updates"; }
+:if ($UpdateAvailable = false && $SilentMode = true) do={ 
+  :log debug "update-scripts - No updates available";
+  :return;
+}
 :if ($UpdateAvailable = false && $SilentMode = false) do={
   :put "+===============================================================+";
   :put "|  TxMTC - Up to date!                                          |";
   :put ("  Current: " . $TxMTCVersion . " | Remote: " . $RemoteVersion);
   :put "+===============================================================+";
-  :error "No updates";
+  :put "";
+  :return;
 }
 
 # Update scripts
@@ -94,6 +98,8 @@
   "modules/custom-commands"="modules/custom-commands.rsc";
   "modules/wireless-monitoring"="modules/wireless-monitoring.rsc";
   "modules/daily-summary"="modules/daily-summary.rsc";
+  "set-credentials"="set-credentials.rsc";
+  "load-credentials-from-file"="load-credentials-from-file.rsc";
   "update-scripts"="update-scripts.rsc"
 };
 
