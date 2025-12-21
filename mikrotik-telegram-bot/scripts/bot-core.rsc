@@ -344,14 +344,14 @@
             :if ([:typeof $AnswerCallbackQuery] = "array") do={
               [$AnswerCallbackQuery [:tostr $CallbackId] "" false];
             }
-            # Process as if user sent the command - create a fake message update
+            # Process as if user sent the command
             :set Command $CmdToExecute;
             :set Message ($CallbackQuery->"message");
             :set Chat ($Message->"chat");
             :set From ($CallbackQuery->"from");
             :set IsMyReply true;
             :set IsAnyReply false;
-            # Don't continue - process the command below
+            # Fall through to process command (don't continue)
           } else={
             # Handle other callbacks via interactive menu
             :if ([:typeof $HandleCallbackQuery] = "array") do={

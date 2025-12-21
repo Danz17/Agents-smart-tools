@@ -82,7 +82,12 @@
   # Build message text
   :local Subject [:tostr ($Notification->"subject")];
   :local Msg [:tostr ($Notification->"message")];
-  :local Text ("[" . $IdentStr . "] " . $Subject . "\n\n" . $Msg);
+  :local Text "";
+  :if ([:len $Subject] > 0) do={
+    :set Text ("[" . $IdentStr . "] " . $Subject . "\n\n" . $Msg);
+  } else={
+    :set Text $Msg;
+  }
   
   # Build HTTP data
   :local HTTPData ("chat_id=" . $ChatId . \
