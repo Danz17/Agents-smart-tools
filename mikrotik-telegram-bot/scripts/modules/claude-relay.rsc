@@ -54,6 +54,21 @@
   :set ClaudeRelayMode "anthropic";
 }
 
+:global ClaudeRelayUseCloud;
+:if ([:typeof $ClaudeRelayUseCloud] != "bool") do={
+  :set ClaudeRelayUseCloud false;
+}
+
+:global ClaudeRelayCloudPort;
+:if ([:typeof $ClaudeRelayCloudPort] != "num") do={
+  :set ClaudeRelayCloudPort 8899;
+}
+
+:global ClaudeRelayHandshakeSecret;
+:if ([:typeof $ClaudeRelayHandshakeSecret] != "str") do={
+  :set ClaudeRelayHandshakeSecret "";
+}
+
 :global ClaudeRelayAutoExecute;
 :if ([:typeof $ClaudeRelayAutoExecute] != "bool") do={
   :set ClaudeRelayAutoExecute false;
@@ -232,6 +247,135 @@
     :return ({success=false; error="Empty response from Claude relay"});
   } do={
     :return ({success=false; error=$RequestErr});
+  }
+}
+
+# ============================================================================
+# HANDshake WITH CLOUD SERVICE
+# ============================================================================
+
+:global ClaudeRelayHandshake do={
+  :global ClaudeRelayURL;
+  :global ClaudeRelayTimeout;
+  :global ClaudeRelayHandshakeSecret;
+  :global Identity;
+  :global CertificateAvailable;
+  :global UrlEncode;
+  
+  :local HandshakeURL ($ClaudeRelayURL . "/handshake");
+  :local TimeoutNum [:totime $ClaudeRelayTimeout];
+  
+  # Get router identity
+  :local RouterIdentity $Identity;
+  :local RouterId [/system identity get name];
+  :local Timestamp [:tostr [:timestamp]];
+  
+  # Build handshake request
+  :local RequestBody ("{\"router_identity\":\"" . [$UrlEncode $RouterIdentity] . \
+    "\",\"router_id\":\"" . [$UrlEncode $RouterId] . \
+    "\",\"timestamp\":\"" . $Timestamp . "\"");
+  
+  # Add signature if secret is configured
+  :if ([:len $ClaudeRelayHandshakeSecret] > 0) do={
+    # Note: RouterOS doesn't have HMAC, so signature is optional
+    # Python service will validate if secret is set
+    :set RequestBody ($RequestBody . ",\"signature\":\"" . $ClaudeRelayHandshakeSecret . "\"");
+  }
+  
+  :set RequestBody ($RequestBody . "}");
+  
+  :onerror HandshakeErr {
+    :local CheckCert [$CertificateAvailable "ISRG Root X1"];
+    :local Data;
+    :if ($CheckCert = false) do={
+      :set Data ([ /tool/fetch check-certificate=no output=user http-method=post timeout=$TimeoutNum \
+        http-header-field="Content-Type: application/json" \
+        http-data=$RequestBody \
+        $HandshakeURL as-value ]->"data");
+    } else={
+      :set Data ([ /tool/fetch check-certificate=yes-without-crl output=user http-method=post timeout=$TimeoutNum \
+        http-header-field="Content-Type: application/json" \
+        http-data=$RequestBody \
+        $HandshakeURL as-value ]->"data");
+    }
+    
+    :if ([:len $Data] > 0) do={
+      :local Response [ :deserialize from=json $Data ];
+      :if (($Response->"success") = true) do={
+        :log info ("claude-relay - Handshake successful with cloud service");
+        :return ({success=true; message=($Response->"message"); cloud_port=($Response->"cloud_port")});
+      }
+    }
+    :return ({success=false; error="Handshake failed"});
+  } do={
+    :return ({success=false; error=$HandshakeErr});
+  }
+}
+
+# ============================================================================
+# GET CLOUD URL
+# ============================================================================
+
+:global GetCloudURL do={
+  :global ClaudeRelayUseCloud;
+  :global ClaudeRelayCloudPort;
+  
+  :if ($ClaudeRelayUseCloud != true) do={
+    :return "";
+  }
+  
+  # Get cloud IP or DDNS
+  :local CloudIP "";
+  :local CloudDDNS "";
+  
+  :onerror CloudErr {
+    :local CloudInfo [/ip cloud get];
+    :set CloudIP ($CloudInfo->"public-address");
+    :set CloudDDNS ($CloudInfo->"ddns-name");
+  } do={}
+  
+  # Prefer DDNS if available, otherwise use cloud IP
+  :if ([:len $CloudDDNS] > 0) do={
+    :return ("http://" . $CloudDDNS . ":" . [:tostr $ClaudeRelayCloudPort]);
+  } else={
+    :if ([:len $CloudIP] > 0) do={
+      :return ("http://" . $CloudIP . ":" . [:tostr $ClaudeRelayCloudPort]);
+    }
+  }
+  
+  :return "";
+}
+
+# ============================================================================
+# INITIALIZE CLOUD CONNECTION
+# ============================================================================
+
+:global ClaudeRelayInitCloud do={
+  :global ClaudeRelayUseCloud;
+  :global ClaudeRelayHandshake;
+  :global GetCloudURL;
+  
+  :if ($ClaudeRelayUseCloud != true) do={
+    :return ({success=false; error="Cloud mode not enabled"});
+  }
+  
+  # Get cloud URL
+  :local CloudURL [$GetCloudURL];
+  :if ([:len $CloudURL] = 0) do={
+    :return ({success=false; error="Cloud IP/DDNS not available"});
+  }
+  
+  # Update ClaudeRelayURL to use cloud
+  :global ClaudeRelayURL;
+  :set ClaudeRelayURL $CloudURL;
+  
+  # Perform handshake
+  :local HandshakeResult [$ClaudeRelayHandshake];
+  :if (($HandshakeResult->"success") = true) do={
+    :log info ("claude-relay - Cloud connection established: " . $CloudURL);
+    :return ({success=true; url=$CloudURL; message=($HandshakeResult->"message")});
+  } else={
+    :return ({success=false; error=($HandshakeResult->"error")});
   }
 }
 

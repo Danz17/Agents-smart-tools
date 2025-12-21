@@ -308,6 +308,36 @@
 # Enable error suggestions (when enabled, Claude analyzes command errors and suggests fixes)
 :global ClaudeRelayErrorSuggestions false
 
+# Use MikroTik Cloud server for relay access (via cloud IP or DDNS)
+# When enabled, router will use its cloud connection to reach the Python service
+:global ClaudeRelayUseCloud false
+
+# Cloud server port (default: 8899)
+:global ClaudeRelayCloudPort 8899
+
+# Optional handshake secret for cloud connection security
+# Leave empty to disable signature verification
+:global ClaudeRelayHandshakeSecret ""
+
+# ============================================================================
+# CLAUDE API NATIVE MODE (Direct API - No Python Service Required)
+# ============================================================================
+
+# Enable native RouterOS Claude API integration
+# When enabled, router directly calls Claude API (no Python service needed)
+# When disabled, uses Python service (ClaudeRelayURL)
+:global ClaudeRelayNativeEnabled false
+
+# Claude API key (required for native mode)
+# Get from: https://console.anthropic.com/
+:global ClaudeAPIKey ""
+
+# Claude API model to use
+:global ClaudeAPIModel "claude-3-5-sonnet-20241022"
+
+# API request timeout
+:global ClaudeAPITimeout 30s
+
 # ============================================================================
 # COMMAND EXECUTION SETTINGS
 # ============================================================================

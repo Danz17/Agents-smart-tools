@@ -180,18 +180,25 @@ This release includes everything needed for enterprise-grade MikroTik router man
 - **Claude Code Relay Node** - Smart command processing using Claude AI
   - Natural language command translation to RouterOS commands
   - High-level abstractions (e.g., "block device X")
-  - Multi-threaded Python service for concurrent processing
+  - **Native Mode** - Direct Claude API calls from router (no Python service needed)
+    - New module: `scripts/modules/claude-relay-native.rsc`
+    - Direct API integration using RouterOS `/tool/fetch`
+    - No external dependencies
+    - See [setup/claude-relay-native-setup.md](setup/claude-relay-native-setup.md)
+  - **Python Service Mode** - Multi-threaded processing with advanced features
+    - Multi-threaded Python service for concurrent processing
+    - Cloud server support on port 8899
+    - Handshake mechanism for secure connections
+    - Python service: `claude-relay-node.py` with Flask API
+    - Configuration template: `claude-relay-config.example.json`
   - RouterOS knowledge base with syntax patterns and examples
   - Automatic fallback to direct command execution
   - Configurable Anthropic API or local Claude instance
   - **Auto-execute mode** - Automatically execute translated commands (`ClaudeRelayAutoExecute`)
   - **Error suggestions** - Claude analyzes command errors and suggests fixes (`ClaudeRelayErrorSuggestions`)
-  - New RouterOS module: `scripts/modules/claude-relay.rsc`
-  - Python service: `claude-relay-node.py` with Flask API
+  - New RouterOS modules: `scripts/modules/claude-relay.rsc` (Python service) and `scripts/modules/claude-relay-native.rsc` (Native)
   - Knowledge base: `claude-relay-knowledge.json`
-  - Configuration template: `claude-relay-config.example.json`
-  - Setup documentation: `setup/claude-relay-setup.md`
-  - See [setup/claude-relay-setup.md](setup/claude-relay-setup.md) for setup
+  - Setup documentation: `setup/claude-relay-setup.md` and `setup/claude-relay-native-setup.md`
 
 ### Changed
 - Enhanced `bot-core.rsc` to integrate Claude relay for smart command processing

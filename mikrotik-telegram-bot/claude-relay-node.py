@@ -31,6 +31,7 @@ CORS(app)
 # Configuration
 CONFIG = {
     'port': int(os.getenv('CLAUDE_RELAY_PORT', 5000)),
+    'cloud_port': int(os.getenv('CLAUDE_RELAY_CLOUD_PORT', 8899)),  # Port for cloud access
     'host': os.getenv('CLAUDE_RELAY_HOST', '0.0.0.0'),
     'claude_api_key': os.getenv('CLAUDE_API_KEY', ''),
     'claude_api_url': os.getenv('CLAUDE_API_URL', 'https://api.anthropic.com/v1/messages'),
@@ -39,6 +40,8 @@ CONFIG = {
     'max_workers': int(os.getenv('MAX_WORKERS', 10)),
     'request_timeout': int(os.getenv('REQUEST_TIMEOUT', 30)),
     'knowledge_base_path': os.getenv('KNOWLEDGE_BASE_PATH', 'claude-relay-knowledge.json'),
+    'enable_cloud': os.getenv('CLAUDE_RELAY_ENABLE_CLOUD', 'false').lower() == 'true',
+    'handshake_secret': os.getenv('CLAUDE_RELAY_HANDSHAKE_SECRET', ''),  # Optional secret for handshake
 }
 
 # Thread pool for concurrent processing
@@ -380,6 +383,67 @@ def execute_command():
         }), 500
 
 
+@app.route('/handshake', methods=['POST'])
+def handshake():
+    """Handshake endpoint for router cloud connection verification."""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                "success": False,
+                "error": "Missing request body"
+            }), 400
+        
+        router_identity = data.get('router_identity', '')
+        router_id = data.get('router_id', '')
+        timestamp = data.get('timestamp', '')
+        signature = data.get('signature', '')
+        
+        # Basic handshake validation
+        if not router_identity:
+            return jsonify({
+                "success": False,
+                "error": "Missing router_identity"
+            }), 400
+        
+        # Optional: Verify signature if handshake_secret is configured
+        if CONFIG['handshake_secret']:
+            import hmac
+            import hashlib
+            expected_signature = hmac.new(
+                CONFIG['handshake_secret'].encode(),
+                f"{router_identity}:{router_id}:{timestamp}".encode(),
+                hashlib.sha256
+            ).hexdigest()
+            
+            if signature != expected_signature:
+                return jsonify({
+                    "success": False,
+                    "error": "Invalid handshake signature"
+                }), 401
+        
+        # Successful handshake
+        logger.info(f"Handshake successful from router: {router_identity} (ID: {router_id})")
+        
+        return jsonify({
+            "success": True,
+            "message": "Handshake successful",
+            "service": "claude-relay-node",
+            "version": "2.4.0",
+            "timestamp": datetime.utcnow().isoformat(),
+            "router_identity": router_identity,
+            "cloud_port": CONFIG['cloud_port'],
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in handshake endpoint: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
 @app.route('/suggest-error-fix', methods=['POST'])
 def suggest_error_fix():
     """Analyze command error and suggest fixes using Claude."""
@@ -476,8 +540,35 @@ if __name__ == '__main__':
         logger.warning("Claude API key not configured. Set CLAUDE_API_KEY environment variable.")
     
     logger.info(f"Starting Claude Code Relay Node on {CONFIG['host']}:{CONFIG['port']}")
+    if CONFIG['enable_cloud']:
+        logger.info(f"Cloud access enabled on port {CONFIG['cloud_port']}")
     logger.info(f"Mode: {CONFIG['claude_mode']}")
     logger.info(f"Max workers: {CONFIG['max_workers']}")
+    
+    # Start main service
+    if CONFIG['enable_cloud']:
+        # Start cloud server on separate port
+        import threading
+        cloud_app = Flask(__name__)
+        CORS(cloud_app)
+        
+        # Copy routes to cloud app
+        cloud_app.add_url_rule('/health', 'health_check', health_check, methods=['GET'])
+        cloud_app.add_url_rule('/process-command', 'process_command', process_command, methods=['POST'])
+        cloud_app.add_url_rule('/suggest-error-fix', 'suggest_error_fix', suggest_error_fix, methods=['POST'])
+        cloud_app.add_url_rule('/handshake', 'handshake', handshake, methods=['POST'])
+        
+        def run_cloud_server():
+            cloud_app.run(
+                host=CONFIG['host'],
+                port=CONFIG['cloud_port'],
+                threaded=True,
+                debug=False
+            )
+        
+        cloud_thread = threading.Thread(target=run_cloud_server, daemon=True)
+        cloud_thread.start()
+        logger.info(f"Cloud server started on port {CONFIG['cloud_port']}")
     
     app.run(
         host=CONFIG['host'],

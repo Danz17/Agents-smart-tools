@@ -56,7 +56,8 @@
 - Natural language command processing
 - High-level abstractions (e.g., "block device X")
 - Context-aware RouterOS command generation
-- Multi-threaded request handling
+- **Native Mode** - Direct API calls from router (no Python service needed)
+- **Python Service Mode** - Multi-threaded processing with advanced features
 - Automatic fallback to direct commands
 - **Auto-execute mode** - Automatically execute translated commands
 - **Error suggestions** - Get AI-powered suggestions when commands fail
@@ -111,7 +112,12 @@ When Claude Code Relay Node is enabled, you can use natural language:
 - `show dhcp leases`
 - `what's using the most bandwidth?`
 
-See [setup/claude-relay-setup.md](setup/claude-relay-setup.md) for configuration.
+**Two modes available:**
+- **Native Mode** (Recommended) - Direct API calls, no Python service needed
+  - See [setup/claude-relay-native-setup.md](setup/claude-relay-native-setup.md)
+- **Python Service Mode** - Advanced features with multi-threading
+  - See [setup/claude-relay-setup.md](setup/claude-relay-setup.md)
+- **Comparison**: See [setup/claude-relay-comparison.md](setup/claude-relay-comparison.md)
 
 ---
 

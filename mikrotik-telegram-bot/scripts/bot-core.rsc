@@ -79,11 +79,22 @@
     }
   }
 
-  # Import Claude relay module
+  # Import Claude relay module (Python service mode)
   :global ClaudeRelayLoaded;
   :if ($ClaudeRelayLoaded != true) do={
     :onerror ModErr { /system script run "modules/claude-relay"; } do={
       :log warning ($ScriptName . " - Could not load claude-relay module");
+    }
+  }
+
+  # Import Claude relay native module (Direct API mode)
+  :global ClaudeRelayNativeLoaded;
+  :global ClaudeRelayNativeEnabled;
+  :if ([:typeof $ClaudeRelayNativeEnabled] = "bool" && $ClaudeRelayNativeEnabled = true) do={
+    :if ($ClaudeRelayNativeLoaded != true) do={
+      :onerror ModErr { /system script run "modules/claude-relay-native"; } do={
+        :log warning ($ScriptName . " - Could not load claude-relay-native module");
+      }
     }
   }
 
@@ -139,8 +150,10 @@
   :global CleanupOldMessages;
   :global GetUserNotificationStyle;
   :global ProcessSmartCommand;
+  :global ProcessSmartCommandNative;
   :global ClaudeRelayAvailable;
   :global GetErrorSuggestions;
+  :global ClaudeRelayInitCloud;
   :global SendTelegramWithKeyboard;
   :global CreateInlineKeyboard;
   :global CreateCommandButtons;
@@ -217,6 +230,19 @@
     }
   } do={
     :log debug ($ScriptName . " - No persisted state found (first run)");
+  }
+
+  # Initialize cloud connection if enabled
+  :global ClaudeRelayUseCloud;
+  :if ([:typeof $ClaudeRelayUseCloud] = "bool" && $ClaudeRelayUseCloud = true) do={
+    :if ([:typeof $ClaudeRelayInitCloud] = "array") do={
+      :local CloudResult [$ClaudeRelayInitCloud];
+      :if (($CloudResult->"success") = true) do={
+        :log info ($ScriptName . " - Cloud connection established: " . ($CloudResult->"url"));
+      } else={
+        :log warning ($ScriptName . " - Cloud connection failed: " . ($CloudResult->"error"));
+      }
+    }
   }
 
   # ============================================================================
@@ -802,37 +828,59 @@
           :if ($Done = false) do={
             # Process smart commands via Claude relay (if enabled and command looks like natural language)
             :global ClaudeRelayEnabled;
+            :global ClaudeRelayNativeEnabled;
             :global ClaudeRelayAutoExecute;
             :local IsSmartCommand false;
             :local OriginalSmartCommand "";
-            :if ([:typeof $ClaudeRelayEnabled] = "bool" && $ClaudeRelayEnabled = true) do={
+            
+            # Check if either Python service mode or native mode is enabled
+            :local UseClaude false;
+            :if ([:typeof $ClaudeRelayNativeEnabled] = "bool" && $ClaudeRelayNativeEnabled = true) do={
+              :set UseClaude true;
+            } else={
+              :if ([:typeof $ClaudeRelayEnabled] = "bool" && $ClaudeRelayEnabled = true) do={
+                :set UseClaude true;
+              }
+            }
+            
+            :if ($UseClaude = true) do={
               # Detect smart commands: not starting with "/" or contains natural language patterns
               :if ([:pick $Command 0 1] != "/" || $Command ~ "^(show|block|unblock|what|how|list|get|find|check)") do={
-                :if ([:typeof $ProcessSmartCommand] = "array") do={
-                  :set OriginalSmartCommand $Command;
-                  :local SmartResult [$ProcessSmartCommand $Command];
-                  :if (($SmartResult->"success") = true) do={
-                    :set Command ($SmartResult->"routeros_command");
-                    :set IsSmartCommand true;
-                    :log info ($ScriptName . " - Smart command processed: \"" . $OriginalSmartCommand . "\" -> \"" . $Command . "\"");
-                    
-                    # If auto-execute is enabled, show the translation and proceed
-                    :if ([:typeof $ClaudeRelayAutoExecute] = "bool" && $ClaudeRelayAutoExecute = true) do={
-                      $SendTelegram2 ({ chatid=($Chat->"id"); silent=true; \
-                        replyto=($Message->"message_id"); threadid=$ThreadId; \
-                        subject="⚡ TxMTC | Smart Command"; \
-                        message=("🤖 Translated:\n`" . $OriginalSmartCommand . "`\n\n→ `" . $Command . "`\n\nExecuting...") });
-                    }
-                  } else={
-                    # Smart command processing failed, fall back to direct execution
-                    :local ErrorMsg ($SmartResult->"error");
-                    :log warning ($ScriptName . " - Smart command failed: " . $ErrorMsg);
-                    $SendTelegram2 ({ chatid=($Chat->"id"); silent=false; \
+                :set OriginalSmartCommand $Command;
+                :local SmartResult ({success=false});
+                
+                # Try native mode first (direct API), then fall back to Python service
+                :if ([:typeof $ClaudeRelayNativeEnabled] = "bool" && $ClaudeRelayNativeEnabled = true && \
+                     [:typeof $ProcessSmartCommandNative] = "array") do={
+                  :set SmartResult [$ProcessSmartCommandNative $Command];
+                } else={
+                  :if ([:typeof $ClaudeRelayEnabled] = "bool" && $ClaudeRelayEnabled = true && \
+                       [:typeof $ProcessSmartCommand] = "array") do={
+                    :set SmartResult [$ProcessSmartCommand $Command];
+                  }
+                }
+                
+                :if (($SmartResult->"success") = true) do={
+                  :set Command ($SmartResult->"routeros_command");
+                  :set IsSmartCommand true;
+                  :log info ($ScriptName . " - Smart command processed: \"" . $OriginalSmartCommand . "\" -> \"" . $Command . "\"");
+                  
+                  # If auto-execute is enabled, show the translation and proceed
+                  :if ([:typeof $ClaudeRelayAutoExecute] = "bool" && $ClaudeRelayAutoExecute = true) do={
+                    $SendTelegram2 ({ chatid=($Chat->"id"); silent=true; \
                       replyto=($Message->"message_id"); threadid=$ThreadId; \
                       subject="⚡ TxMTC | Smart Command"; \
-                      message=("Could not process smart command:\n\n" . $Command . "\n\nError: " . $ErrorMsg . "\n\nTry using RouterOS command syntax instead.") });
-                    :set Done true;
+                      message=("🤖 Translated:\n`" . $OriginalSmartCommand . "`\n\n→ `" . $Command . "`\n\nExecuting...") });
                   }
+                } else={
+                  # Smart command processing failed, fall back to direct execution
+                  :local ErrorMsg ($SmartResult->"error");
+                  :log warning ($ScriptName . " - Smart command failed: " . $ErrorMsg);
+                  $SendTelegram2 ({ chatid=($Chat->"id"); silent=false; \
+                    replyto=($Message->"message_id"); threadid=$ThreadId; \
+                    subject="⚡ TxMTC | Smart Command"; \
+                    message=("Could not process smart command:\n\n" . $Command . "\n\nError: " . $ErrorMsg . "\n\nTry using RouterOS command syntax instead.") });
+                  :set Done true;
                 }
               }
             }

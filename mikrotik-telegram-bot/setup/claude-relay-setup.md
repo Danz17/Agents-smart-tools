@@ -8,6 +8,24 @@ This guide explains how to set up and configure the Claude Code Relay Node for s
 
 The Claude Code Relay Node enables intelligent command processing by translating natural language and high-level commands into RouterOS commands using Claude AI. This allows users to interact with the router using plain English instead of memorizing RouterOS syntax.
 
+### Two Modes Available
+
+1. **Native Mode** (Recommended for simplicity)
+   - Router directly calls Claude API
+   - No Python service required
+   - No external server needed
+   - See [claude-relay-native-setup.md](claude-relay-native-setup.md)
+
+2. **Python Service Mode** (Advanced features)
+   - External Python service processes commands
+   - Multi-threaded processing
+   - Cloud server support
+   - Error suggestions
+
+### Cloud Server Support
+
+The Python service can be accessed via MikroTik Cloud server (DDNS) on port 8899, allowing remote access without exposing your local network. A handshake mechanism ensures secure connection verification.
+
 ## Architecture
 
 ```
@@ -86,6 +104,13 @@ export CLAUDE_RELAY_PORT=5000
 export CLAUDE_RELAY_HOST=0.0.0.0
 export CLAUDE_API_KEY="your-api-key"
 export CLAUDE_MODEL="claude-3-5-sonnet-20241022"
+
+# Enable cloud server on port 8899
+export CLAUDE_RELAY_ENABLE_CLOUD=true
+export CLAUDE_RELAY_CLOUD_PORT=8899
+
+# Optional: Handshake secret for security
+export CLAUDE_RELAY_HANDSHAKE_SECRET="your-secret-key"
 ```
 
 ### Step 4: Start Python Service
@@ -117,6 +142,8 @@ Expected response:
 
 Edit `bot-config.rsc` on your router:
 
+#### Option A: Local Network Access
+
 ```routeros
 # Enable Claude relay
 :global ClaudeRelayEnabled true
@@ -131,13 +158,50 @@ Edit `bot-config.rsc` on your router:
 :global ClaudeRelayMode "anthropic"
 
 # Auto-execute translated commands (optional)
-# When enabled, smart commands are automatically executed after translation
 :global ClaudeRelayAutoExecute true
 
 # Enable error suggestions (optional)
-# When enabled, Claude analyzes command errors and suggests fixes
 :global ClaudeRelayErrorSuggestions true
+
+# Use cloud server (set to false for local access)
+:global ClaudeRelayUseCloud false
 ```
+
+#### Option B: Cloud Server Access (via MikroTik Cloud/DDNS)
+
+```routeros
+# Enable Claude relay
+:global ClaudeRelayEnabled true
+
+# Enable cloud server access
+:global ClaudeRelayUseCloud true
+
+# Cloud server port (default: 8899)
+:global ClaudeRelayCloudPort 8899
+
+# Optional: Handshake secret (must match Python service)
+:global ClaudeRelayHandshakeSecret "your-secret-key"
+
+# Set timeout
+:global ClaudeRelayTimeout 10s
+
+# Set mode
+:global ClaudeRelayMode "anthropic"
+
+# Auto-execute translated commands (optional)
+:global ClaudeRelayAutoExecute true
+
+# Enable error suggestions (optional)
+:global ClaudeRelayErrorSuggestions true
+
+# Note: ClaudeRelayURL will be auto-configured from cloud IP/DDNS
+```
+
+**Important:** For cloud access, ensure:
+1. MikroTik Cloud is enabled: `/ip cloud set ddns-enabled=yes`
+2. Python service has `CLAUDE_RELAY_ENABLE_CLOUD=true`
+3. Firewall allows port 8899 (if needed)
+4. Handshake secret matches (if configured)
 
 Then reload configuration:
 
@@ -161,6 +225,28 @@ Verify it's loaded:
 ```
 
 Should output: `true`
+
+### Step 7: Initialize Cloud Connection (if using cloud)
+
+If you enabled cloud access, initialize the connection:
+
+```routeros
+:global ClaudeRelayInitCloud
+[$ClaudeRelayInitCloud]
+```
+
+This will:
+1. Get your router's cloud IP or DDNS name
+2. Perform handshake with Python service
+3. Configure `ClaudeRelayURL` automatically
+
+Check cloud status:
+
+```routeros
+/ip cloud print
+:global ClaudeRelayURL
+:put "Service URL: " . $ClaudeRelayURL
+```
 
 ## Usage
 
@@ -253,6 +339,9 @@ If Claude relay is unavailable or processing fails:
 | `ClaudeRelayMode` | `anthropic` | `anthropic` or `local` |
 | `ClaudeRelayAutoExecute` | `false` | Auto-execute translated commands (when enabled, commands are automatically executed after translation) |
 | `ClaudeRelayErrorSuggestions` | `false` | Enable error suggestions (when enabled, Claude analyzes command errors and suggests fixes) |
+| `ClaudeRelayUseCloud` | `false` | Use MikroTik Cloud server for access (via cloud IP or DDNS) |
+| `ClaudeRelayCloudPort` | `8899` | Port for cloud server access |
+| `ClaudeRelayHandshakeSecret` | `""` | Optional secret for handshake verification |
 
 ## Security Considerations
 
@@ -261,6 +350,8 @@ If Claude relay is unavailable or processing fails:
 3. **Firewall Rules**: Restrict access to Python service port
 4. **Command Validation**: All generated commands are validated before execution
 5. **Dangerous Commands**: Blocked commands are never generated
+6. **Cloud Access**: Use handshake secret for cloud connections
+7. **Port Security**: Cloud port (8899) should be restricted if possible
 
 ## Troubleshooting
 
