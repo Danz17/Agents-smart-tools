@@ -353,6 +353,50 @@
             :set IsAnyReply false;
             # Fall through to process command (don't continue)
           } else={
+            # Handle monitoring callbacks
+            :if ($CallbackData = "monitoring:refresh") do={
+              :global AnswerCallbackQuery;
+              :if ([:typeof $AnswerCallbackQuery] = "array") do={
+                [$AnswerCallbackQuery [:tostr $CallbackId] "Refreshing monitoring..." false];
+              }
+              # Execute monitoring script immediately
+              :onerror MonErr {
+                /system script run "modules/monitoring";
+                :log info ($ScriptName . " - Monitoring refresh triggered");
+              } do={
+                :log warning ($ScriptName . " - Failed to run monitoring: " . $MonErr);
+              }
+              :continue;
+            }
+            
+            :if ($CallbackData = "monitoring:devices") do={
+              :global AnswerCallbackQuery;
+              :global GetConnectedDevices;
+              :global SendTelegram2;
+              :if ([:typeof $AnswerCallbackQuery] = "array") do={
+                [$AnswerCallbackQuery [:tostr $CallbackId] "" false];
+              }
+              :if ([:typeof $GetConnectedDevices] = "array") do={
+                :local DevicesMsg [$GetConnectedDevices];
+                $SendTelegram2 ({ chatid=$CallbackChatId; silent=false; subject="📱 Connected Devices"; message=$DevicesMsg; threadid=$ThreadId });
+              } else={
+                $SendTelegram2 ({ chatid=$CallbackChatId; silent=false; subject="📱 Connected Devices"; message="Connected devices function not available."; threadid=$ThreadId });
+              }
+              :continue;
+            }
+            
+            :if ($CallbackData = "monitoring:command") do={
+              :global AnswerCallbackQuery;
+              :if ([:typeof $AnswerCallbackQuery] = "array") do={
+                [$AnswerCallbackQuery [:tostr $CallbackId] "" false];
+              }
+              # Send prompt message asking user to type command
+              $SendTelegram2 ({ chatid=$CallbackChatId; silent=false; subject="⚙️ RouterOS Command"; \
+                message=("Type your RouterOS command now\\.\n\nExample:\n`/interface print`\n`/ip dhcp-server lease print`\n\nOr activate device first:\n`! " . $Identity . "`\n\nThen send your command\\."); \
+                threadid=$ThreadId });
+              :continue;
+            }
+            
             # Handle other callbacks via interactive menu
             :if ([:typeof $HandleCallbackQuery] = "array") do={
               [$HandleCallbackQuery $CallbackData $CallbackChatId [:tostr $CallbackMsgId] $ThreadId [:tostr $CallbackId]];
@@ -470,6 +514,19 @@
           :local HelpButtons [$CreateCommandButtons $HelpCmds];
           [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $HelpText $HelpButtons $ThreadId [:tostr ($Message->"message_id")]];
           :set Done true;
+        }
+        
+        # Handle /monitoring-settings command
+        :if ($Done = false && $Command = "/monitoring-settings") do={
+          :global ShowMonitoringSettings;
+          :if ([:typeof $ShowMonitoringSettings] = "array") do={
+            [$ShowMonitoringSettings [:tostr ($Chat->"id")] "0" $ThreadId];
+            :set Done true;
+          } else={
+            :local ErrorMsg "Monitoring settings menu not available\\.";
+            [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $ErrorMsg ({}) $ThreadId [:tostr ($Message->"message_id")]];
+            :set Done true;
+          }
         }
         
         # Handle /menu command
@@ -601,6 +658,87 @@
             :local ErrorMsg "Settings module not loaded\\.";
             [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $ErrorMsg ({}) $ThreadId [:tostr ($Message->"message_id")]];
           }
+          :set Done true;
+        }
+        
+        # Handle /monitor-interfaces command
+        :if ($Done = false && $Command ~ "^/monitor-interfaces") do={
+          :global AddMonitoredInterface;
+          :global RemoveMonitoredInterface;
+          :global GetMonitoredInterfaces;
+          :global ListAvailableInterfaces;
+          :global MonitorInterfaces;
+          
+          :local CmdParts ({});
+          :local CurrentPart "";
+          :for I from=0 to=([:len $Command] - 1) do={
+            :local Char [:pick $Command $I ($I + 1)];
+            :if ($Char = " ") do={
+              :if ([:len $CurrentPart] > 0) do={
+                :set ($CmdParts->[:len $CmdParts]) $CurrentPart;
+                :set CurrentPart "";
+              }
+            } else={
+              :set CurrentPart ($CurrentPart . $Char);
+            }
+          }
+          :if ([:len $CurrentPart] > 0) do={ :set ($CmdParts->[:len $CmdParts]) $CurrentPart; }
+          
+          :local Action "";
+          :local InterfaceName "";
+          :if ([:len $CmdParts] > 1) do={ :set Action ($CmdParts->1); }
+          :if ([:len $CmdParts] > 2) do={ :set InterfaceName ($CmdParts->2); }
+          
+          :local ResponseMsg "";
+          :if ($Action = "add" && [:len $InterfaceName] > 0) do={
+            :if ([:typeof $AddMonitoredInterface] = "array") do={
+              :if ([$AddMonitoredInterface $InterfaceName] = true) do={
+                :set ResponseMsg ("✅ Added *" . $InterfaceName . "* to monitored interfaces\\.\n\nCurrent list: `" . $MonitorInterfaces . "`");
+              } else={
+                :set ResponseMsg ("⚠️ Interface *" . $InterfaceName . "* is already monitored\\.\n\nCurrent list: `" . $MonitorInterfaces . "`");
+              }
+            } else={
+              :set ResponseMsg "❌ Interface management functions not available\\.";
+            }
+          } else={
+            :if ($Action = "remove" && [:len $InterfaceName] > 0) do={
+              :if ([:typeof $RemoveMonitoredInterface] = "array") do={
+                :if ([$RemoveMonitoredInterface $InterfaceName] = true) do={
+                  :set ResponseMsg ("✅ Removed *" . $InterfaceName . "* from monitored interfaces\\.\n\nCurrent list: `" . $MonitorInterfaces . "`");
+                } else={
+                  :set ResponseMsg ("⚠️ Interface *" . $InterfaceName . "* is not in the monitored list\\.\n\nCurrent list: `" . $MonitorInterfaces . "`");
+                }
+              } else={
+                :set ResponseMsg "❌ Interface management functions not available\\.";
+              }
+            } else={
+              :if ($Action = "list") do={
+                :if ([:typeof $GetMonitoredInterfaces] = "array") do={
+                  :local MonitoredList [$GetMonitoredInterfaces];
+                  :set ResponseMsg ("📋 *Monitored Interfaces:*\n\n");
+                  :foreach Int in=$MonitoredList do={
+                    :set ResponseMsg ($ResponseMsg . "• `" . $Int . "`\n");
+                  }
+                  :if ([:len $MonitoredList] = 0) do={
+                    :set ResponseMsg ($ResponseMsg . "_No interfaces configured_");
+                  }
+                } else={
+                  :set ResponseMsg ("📋 *Monitored Interfaces:*\n\n`" . $MonitorInterfaces . "`");
+                }
+              } else={
+                :set ResponseMsg ("📋 *Monitor Interfaces*\n\n" . \
+                  "Usage:\n" . \
+                  "`/monitor-interfaces add <interface>`\n" . \
+                  "`/monitor-interfaces remove <interface>`\n" . \
+                  "`/monitor-interfaces list`\n\n" . \
+                  "Current: `" . $MonitorInterfaces . "`");
+              }
+            }
+          }
+          
+          :local InterfaceCmds ({{"/monitor-interfaces list"; "/settings"; "/help"}});
+          :local InterfaceButtons [$CreateCommandButtons $InterfaceCmds];
+          [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $ResponseMsg $InterfaceButtons $ThreadId [:tostr ($Message->"message_id")]];
           :set Done true;
         }
         

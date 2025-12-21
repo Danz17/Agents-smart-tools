@@ -93,6 +93,16 @@
 # Interface monitoring
 # Monitor these interfaces for status and errors
 :global MonitorInterfaces "ether1,ether2,bridge,wlan1"
+:global MonitorInterfaceMode "whitelist"  # whitelist or blacklist
+
+# Monitoring type toggles
+:global MonitorCPUEnabled true
+:global MonitorRAMEnabled true
+:global MonitorDiskEnabled true
+:global MonitorInterfacesEnabled true
+:global MonitorInternetEnabled true
+:global MonitorTempEnabled true
+:global MonitorVoltageEnabled true
 
 # Traffic threshold (bytes per second)
 # Alert on unusual traffic patterns

@@ -85,7 +85,8 @@
 }
 :log info ("update-scripts - Updating from " . $TxMTCVersion . " to " . $RemoteVersion);
 
-:local ScriptList {
+# Separate critical scripts from optional ones
+:local CriticalScripts {
   "bot-config"="bot-config.rsc";
   "modules/shared-functions"="modules/shared-functions.rsc";
   "modules/telegram-api"="modules/telegram-api.rsc";
@@ -107,14 +108,25 @@
   "modules/sms-actions"="modules/sms-actions.rsc";
   "modules/cert-monitor"="modules/cert-monitor.rsc";
   "modules/interactive-installer"="modules/interactive-installer.rsc";
-  "set-credentials"="set-credentials.rsc";
   "load-credentials-from-file"="load-credentials-from-file.rsc";
   "update-scripts"="update-scripts.rsc"
 };
 
+# Optional scripts (failures don't block notification)
+:local OptionalScripts {
+  "set-credentials"="set-credentials.rsc"
+};
+
+# Combine for processing
+:local ScriptList $CriticalScripts;
+:foreach ScriptItem,FilePath in=$OptionalScripts do={
+  :set ($ScriptList->$ScriptItem) $FilePath;
+}
+
 :local UpdateCount 0;
 :local CreateCount 0;
 :local FailCount 0;
+:local CriticalFailCount 0;
 
 :foreach ScriptItem,FilePath in=$ScriptList do={
   :local URL ($BaseURL . "/" . $FilePath);
@@ -139,14 +151,25 @@
     } else={
       :if ($SilentMode = false) do={ :put ("  FAILED: Empty content"); }
       :set FailCount ($FailCount + 1);
+      # Check if this is a critical script
+      :if ([:typeof ($CriticalScripts->$ScriptItem)] = "str") do={
+        :set CriticalFailCount ($CriticalFailCount + 1);
+      }
     }
   } do={
     :if ($SilentMode = false) do={ :put ("  FAILED: " . $FetchError); }
     :set FailCount ($FailCount + 1);
+    # Check if this is a critical script
+    :if ([:typeof ($CriticalScripts->$ScriptItem)] = "str") do={
+      :set CriticalFailCount ($CriticalFailCount + 1);
+    }
   }
 }
 
-:if ($FailCount = 0) do={ :set TxMTCVersion $RemoteVersion; }
+# Update version if critical scripts succeeded (even if optional ones failed)
+:if ($CriticalFailCount = 0 && ($UpdateCount + $CreateCount) > 0) do={ 
+  :set TxMTCVersion $RemoteVersion; 
+}
 
 # Clear module caches
 :global SharedFunctionsLoaded; :set SharedFunctionsLoaded;
@@ -168,17 +191,24 @@
 :if ($SilentMode = false) do={
   :put "+---------------------------------------------------------------+";
   :put ("| Updated: " . $UpdateCount . " | Created: " . $CreateCount . " | Failed: " . $FailCount);
+  :if ($CriticalFailCount > 0) do={
+    :put ("| Critical failures: " . $CriticalFailCount);
+  }
   :put ("| Version: " . $TxMTCVersion);
   :put "+---------------------------------------------------------------+";
 }
-:log info ("update-scripts - Complete: " . $UpdateCount . " updated, " . $CreateCount . " created, " . $FailCount . " failed");
+:log info ("update-scripts - Complete: " . $UpdateCount . " updated, " . $CreateCount . " created, " . $FailCount . " failed (critical: " . $CriticalFailCount . ")");
 
-# Telegram notification
-:if ($AutoUpdateNotify = true && $FailCount = 0 && ($UpdateCount + $CreateCount) > 0) do={
+# Telegram notification (send if critical scripts succeeded, even if optional ones failed)
+:if ($AutoUpdateNotify = true && $CriticalFailCount = 0 && ($UpdateCount + $CreateCount) > 0) do={
   :global SendTelegram2;
   :global TelegramChatId;
   :if ([:typeof $SendTelegram2] != "nothing" && [:typeof $TelegramChatId] = "str") do={
-    $SendTelegram2 ({chatid=$TelegramChatId; silent=true; subject="TxMTC Auto-Update"; message=("Updated to v" . $TxMTCVersion)});
+    :local NotifyMsg ("Updated to v" . $TxMTCVersion);
+    :if ($FailCount > 0) do={
+      :set NotifyMsg ($NotifyMsg . "\n\n⚠️ " . $FailCount . " optional script(s) failed to update");
+    }
+    $SendTelegram2 ({chatid=$TelegramChatId; silent=true; subject="TxMTC Auto-Update"; message=$NotifyMsg});
   }
 }
 

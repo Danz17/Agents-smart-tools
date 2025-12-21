@@ -191,6 +191,9 @@
   });
   :set ($Buttons->[:len $Buttons]) ({
     {text="⚙️ Settings"; callback_data="menu:settings"};
+    {text="📊 Monitoring"; callback_data="cmd:/monitoring-settings"}
+  });
+  :set ($Buttons->[:len $Buttons]) ({
     {text="❌ Close"; callback_data="menu:close"}
   });
   
@@ -527,6 +530,68 @@
       [$EditTelegramMessage $ChatId $MessageId $MsgText $KeyboardJson];
     }
   }
+}
+
+# ============================================================================
+# SHOW MONITORING SETTINGS MENU
+# ============================================================================
+
+:global ShowMonitoringSettings do={
+  :local ChatId [ :tostr $1 ];
+  :local MessageId [ :tostr $2 ];
+  :local ThreadId [ :tostr $3 ];
+  
+  :global MonitorCPUEnabled;
+  :global MonitorRAMEnabled;
+  :global MonitorDiskEnabled;
+  :global MonitorInterfacesEnabled;
+  :global MonitorInternetEnabled;
+  :global MonitorTempEnabled;
+  :global MonitorVoltageEnabled;
+  :global MonitorInterfaces;
+  :global MonitorCPUThreshold;
+  :global MonitorRAMThreshold;
+  :global MonitorDiskThreshold;
+  
+  :if ([:typeof $MonitorCPUEnabled] != "bool") do={ :set MonitorCPUEnabled true; }
+  :if ([:typeof $MonitorRAMEnabled] != "bool") do={ :set MonitorRAMEnabled true; }
+  :if ([:typeof $MonitorDiskEnabled] != "bool") do={ :set MonitorDiskEnabled true; }
+  :if ([:typeof $MonitorInterfacesEnabled] != "bool") do={ :set MonitorInterfacesEnabled true; }
+  :if ([:typeof $MonitorInternetEnabled] != "bool") do={ :set MonitorInternetEnabled true; }
+  :if ([:typeof $MonitorTempEnabled] != "bool") do={ :set MonitorTempEnabled true; }
+  :if ([:typeof $MonitorVoltageEnabled] != "bool") do={ :set MonitorVoltageEnabled true; }
+  
+  :local SettingsMsg ("⚙️ *Monitoring Settings*\n\n");
+  :set SettingsMsg ($SettingsMsg . "📊 *Enabled Monitoring:*\n");
+  :set SettingsMsg ($SettingsMsg . ($MonitorCPUEnabled ? "✅" : "❌") . " CPU\n");
+  :set SettingsMsg ($SettingsMsg . ($MonitorRAMEnabled ? "✅" : "❌") . " RAM\n");
+  :set SettingsMsg ($SettingsMsg . ($MonitorDiskEnabled ? "✅" : "❌") . " Disk\n");
+  :set SettingsMsg ($SettingsMsg . ($MonitorInterfacesEnabled ? "✅" : "❌") . " Interfaces\n");
+  :set SettingsMsg ($SettingsMsg . ($MonitorInternetEnabled ? "✅" : "❌") . " Internet\n");
+  :set SettingsMsg ($SettingsMsg . ($MonitorTempEnabled ? "✅" : "❌") . " Temperature\n");
+  :set SettingsMsg ($SettingsMsg . ($MonitorVoltageEnabled ? "✅" : "❌") . " Voltage\n\n");
+  :set SettingsMsg ($SettingsMsg . "📈 *Thresholds:*\n");
+  :set SettingsMsg ($SettingsMsg . "CPU: " . $MonitorCPUThreshold . "%\n");
+  :set SettingsMsg ($SettingsMsg . "RAM: " . $MonitorRAMThreshold . "%\n");
+  :set SettingsMsg ($SettingsMsg . "Disk: " . $MonitorDiskThreshold . "%\n\n");
+  :set SettingsMsg ($SettingsMsg . "🔌 *Interfaces:*\n`" . $MonitorInterfaces . "`\n\n");
+  :set SettingsMsg ($SettingsMsg . "Use `/monitor-interfaces` to configure\\.");
+  
+  :local Buttons ({({
+    {text=($MonitorCPUEnabled ? "❌ CPU" : "✅ CPU"); callback_data="monitoring-settings:toggle:cpu"};
+    {text=($MonitorRAMEnabled ? "❌ RAM" : "✅ RAM"); callback_data="monitoring-settings:toggle:ram"}
+  }, {
+    {text=($MonitorDiskEnabled ? "❌ Disk" : "✅ Disk"); callback_data="monitoring-settings:toggle:disk"};
+    {text=($MonitorInterfacesEnabled ? "❌ Interfaces" : "✅ Interfaces"); callback_data="monitoring-settings:toggle:interfaces"}
+  }, {
+    {text=($MonitorInternetEnabled ? "❌ Internet" : "✅ Internet"); callback_data="monitoring-settings:toggle:internet"};
+    {text="🔌 Interfaces"; callback_data="cmd:/monitor-interfaces list"}
+  }, {
+    {text="🔙 Back"; callback_data="menu:main"}
+  }});
+  
+  :local KeyboardJson [$CreateInlineKeyboard $Buttons];
+  [$SendTelegramWithKeyboard $ChatId $SettingsMsg $KeyboardJson $ThreadId];
 }
 
 # ============================================================================

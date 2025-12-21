@@ -639,12 +639,15 @@
 :global GetOrCreateMonitoringMessage do={
   :local ChatId [ :tostr $1 ];
   :local MessageText [ :tostr $2 ];
+  :local KeyboardJSON [ :tostr $3 ];
   
   :global TelegramMessageHistory;
   :global SendTelegram2;
+  :global SendTelegramWithKeyboard;
   :global EditTelegramMessage;
   :global SaveBotState;
   :global LoadBotState;
+  :global CreateInlineKeyboard;
   
   # Ensure message history is loaded
   :if ([:typeof $TelegramMessageHistory] != "array") do={
@@ -664,19 +667,28 @@
   
   # Try to edit existing message
   :if ([:len $MonitoringMsgId] > 0 && $MonitoringMsgId != "0") do={
-    :local EditResult [$EditTelegramMessage $ChatId $MonitoringMsgId $MessageText ""];
+    :local EditResult [$EditTelegramMessage $ChatId $MonitoringMsgId $MessageText $KeyboardJSON];
     :if ($EditResult = true) do={
+      :log debug ("telegram-api - Monitoring message edited: " . $MonitoringMsgId);
       :return $MonitoringMsgId;
     }
     # Message was deleted, clear ID
+    :log debug ("telegram-api - Monitoring message deleted, creating new one");
     :set ($TelegramMessageHistory->$MonitoringKey) "";
   }
   
   # Create new message
-  :local NewMsgId [$SendTelegram2 ({ chatid=$ChatId; subject=""; message=$MessageText; silent=true })];
+  :local NewMsgId "";
+  :if ([:len $KeyboardJSON] > 0 && [:typeof $SendTelegramWithKeyboard] = "array") do={
+    :set NewMsgId [$SendTelegramWithKeyboard $ChatId $MessageText $KeyboardJSON ""];
+  } else={
+    :set NewMsgId [$SendTelegram2 ({ chatid=$ChatId; subject=""; message=$MessageText; silent=true })];
+  }
+  
   :if ([:len $NewMsgId] > 0) do={
     :set ($TelegramMessageHistory->$MonitoringKey) $NewMsgId;
     [$SaveBotState "message-history" $TelegramMessageHistory];
+    :log debug ("telegram-api - New monitoring message created: " . $NewMsgId);
   }
   :return $NewMsgId;
 }

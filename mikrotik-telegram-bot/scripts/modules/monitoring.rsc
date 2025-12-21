@@ -46,6 +46,14 @@
   :global MonitorVoltageMin;
   :global MonitorVoltageMax;
   :global MonitorInterfaces;
+  :global MonitorInterfaceMode;
+  :global MonitorCPUEnabled;
+  :global MonitorRAMEnabled;
+  :global MonitorDiskEnabled;
+  :global MonitorInterfacesEnabled;
+  :global MonitorInternetEnabled;
+  :global MonitorTempEnabled;
+  :global MonitorVoltageEnabled;
   :global CheckHealthCPUUtilization;
   :global CheckHealthCPUUtilizationNotified;
   :global CheckHealthRAMUtilizationNotified;
@@ -149,105 +157,128 @@
   # CPU MONITORING
   # ============================================================================
   
-  :local Resource [ /system/resource/get ];
-  :local CurrentCPU (($Resource->"cpu-load") * 10);
+  :if ([:typeof $MonitorCPUEnabled] != "bool") do={ :set MonitorCPUEnabled true; }
   
-  :if ([:typeof $CheckHealthCPUUtilization] != "num") do={
-    :set CheckHealthCPUUtilization $CurrentCPU;
-  }
-  
-  # 5-point moving average
-  :set CheckHealthCPUUtilization (($CheckHealthCPUUtilization * 4 + $CurrentCPU) / 5);
-  
-  :if ($CheckHealthCPUUtilization > ($MonitorCPUThreshold * 10) && $CheckHealthCPUUtilizationNotified != true) do={
-    :set CheckHealthCPUUtilizationNotified true;
-    :log warning ($ScriptName . " - CPU utilization high: " . ($CheckHealthCPUUtilization / 10) . "%");
-  }
-  
-  :if ($CheckHealthCPUUtilization < (($MonitorCPUThreshold - 10) * 10) && $CheckHealthCPUUtilizationNotified = true) do={
-    :set CheckHealthCPUUtilizationNotified false;
-    :log info ($ScriptName . " - CPU utilization normal: " . ($CheckHealthCPUUtilization / 10) . "%");
+  :if ($MonitorCPUEnabled = true) do={
+    :local Resource [ /system/resource/get ];
+    :local CurrentCPU (($Resource->"cpu-load") * 10);
+    
+    :if ([:typeof $CheckHealthCPUUtilization] != "num") do={
+      :set CheckHealthCPUUtilization $CurrentCPU;
+    }
+    
+    # 5-point moving average
+    :set CheckHealthCPUUtilization (($CheckHealthCPUUtilization * 4 + $CurrentCPU) / 5);
+    
+    :if ($CheckHealthCPUUtilization > ($MonitorCPUThreshold * 10) && $CheckHealthCPUUtilizationNotified != true) do={
+      :set CheckHealthCPUUtilizationNotified true;
+      :log warning ($ScriptName . " - CPU utilization high: " . ($CheckHealthCPUUtilization / 10) . "%");
+    }
+    
+    :if ($CheckHealthCPUUtilization < (($MonitorCPUThreshold - 10) * 10) && $CheckHealthCPUUtilizationNotified = true) do={
+      :set CheckHealthCPUUtilizationNotified false;
+      :log info ($ScriptName . " - CPU utilization normal: " . ($CheckHealthCPUUtilization / 10) . "%");
+    }
   }
 
   # ============================================================================
   # RAM MONITORING
   # ============================================================================
   
+  :if ([:typeof $MonitorRAMEnabled] != "bool") do={ :set MonitorRAMEnabled true; }
+  
   :local TotalRAM ($Resource->"total-memory");
   :local FreeRAM ($Resource->"free-memory");
   :local UsedRAM ($TotalRAM - $FreeRAM);
   :local RAMPercent ($UsedRAM * 100 / $TotalRAM);
   
-  :if ($RAMPercent >= $MonitorRAMThreshold && $CheckHealthRAMUtilizationNotified != true) do={
-    :set CheckHealthRAMUtilizationNotified true;
-    :log warning ($ScriptName . " - RAM utilization high: " . $RAMPercent . "%");
-  }
-  
-  :if ($RAMPercent < ($MonitorRAMThreshold - 10) && $CheckHealthRAMUtilizationNotified = true) do={
-    :set CheckHealthRAMUtilizationNotified false;
-    :log info ($ScriptName . " - RAM utilization normal: " . $RAMPercent . "%");
+  :if ($MonitorRAMEnabled = true) do={
+    :if ($RAMPercent >= $MonitorRAMThreshold && $CheckHealthRAMUtilizationNotified != true) do={
+      :set CheckHealthRAMUtilizationNotified true;
+      :log warning ($ScriptName . " - RAM utilization high: " . $RAMPercent . "%");
+    }
+    
+    :if ($RAMPercent < ($MonitorRAMThreshold - 10) && $CheckHealthRAMUtilizationNotified = true) do={
+      :set CheckHealthRAMUtilizationNotified false;
+      :log info ($ScriptName . " - RAM utilization normal: " . $RAMPercent . "%");
+    }
   }
 
   # ============================================================================
   # DISK MONITORING
   # ============================================================================
   
+  :if ([:typeof $MonitorDiskEnabled] != "bool") do={ :set MonitorDiskEnabled true; }
+  
   :local TotalHDD ($Resource->"total-hdd-space");
   :local FreeHDD ($Resource->"free-hdd-space");
   :local UsedHDD ($TotalHDD - $FreeHDD);
   :local HDDPercent ($UsedHDD * 100 / $TotalHDD);
   
-  :if ($HDDPercent >= $MonitorDiskThreshold && $CheckHealthDiskUtilizationNotified != true) do={
-    :set CheckHealthDiskUtilizationNotified true;
-    :log warning ($ScriptName . " - Disk usage high: " . $HDDPercent . "%");
-  }
-  
-  :if ($HDDPercent < ($MonitorDiskThreshold - 10) && $CheckHealthDiskUtilizationNotified = true) do={
-    :set CheckHealthDiskUtilizationNotified false;
-    :log info ($ScriptName . " - Disk usage normal: " . $HDDPercent . "%");
+  :if ($MonitorDiskEnabled = true) do={
+    :if ($HDDPercent >= $MonitorDiskThreshold && $CheckHealthDiskUtilizationNotified != true) do={
+      :set CheckHealthDiskUtilizationNotified true;
+      :log warning ($ScriptName . " - Disk usage high: " . $HDDPercent . "%");
+    }
+    
+    :if ($HDDPercent < ($MonitorDiskThreshold - 10) && $CheckHealthDiskUtilizationNotified = true) do={
+      :set CheckHealthDiskUtilizationNotified false;
+      :log info ($ScriptName . " - Disk usage normal: " . $HDDPercent . "%");
+    }
   }
 
   # ============================================================================
   # TEMPERATURE MONITORING
   # ============================================================================
   
+  :if ([:typeof $MonitorTempEnabled] != "bool") do={ :set MonitorTempEnabled true; }
+  
   :local TempVal "";
   :local TempStatus "N/A";
-  :onerror TempErr {
-    :set TempVal [ /system/health/get value-name=temperature ];
-    :if ([:typeof $TempVal] = "num") do={
-      :if ($TempVal > $MonitorTempThreshold) do={
-        :set TempStatus ("⚠️ " . [$FormatTemperature $TempVal] . " (High)");
-        :log warning ($ScriptName . " - Temperature high: " . $TempVal . "°C");
-      } else={
-        :set TempStatus ("✅ " . [$FormatTemperature $TempVal]);
+  :if ($MonitorTempEnabled = true) do={
+    :onerror TempErr {
+      :set TempVal [ /system/health/get value-name=temperature ];
+      :if ([:typeof $TempVal] = "num") do={
+        :if ($TempVal > $MonitorTempThreshold) do={
+          :set TempStatus ("⚠️ " . [$FormatTemperature $TempVal] . " (High)");
+          :log warning ($ScriptName . " - Temperature high: " . $TempVal . "°C");
+        } else={
+          :set TempStatus ("✅ " . [$FormatTemperature $TempVal]);
+        }
       }
-    }
-  } do={ :log debug ($ScriptName . " - No temperature sensor available"); }
+    } do={ :log debug ($ScriptName . " - No temperature sensor available"); }
+  }
 
   # ============================================================================
   # VOLTAGE MONITORING
   # ============================================================================
   
+  :if ([:typeof $MonitorVoltageEnabled] != "bool") do={ :set MonitorVoltageEnabled true; }
+  
   :local VoltageVal "";
   :local VoltageStatus "N/A";
-  :onerror VoltErr {
-    :set VoltageVal [ /system/health/get value-name=voltage ];
-    :if ([:typeof $VoltageVal] = "num") do={
-      :if ($VoltageVal < $MonitorVoltageMin || $VoltageVal > $MonitorVoltageMax) do={
-        :set VoltageStatus ("⚠️ " . [$FormatVoltage $VoltageVal] . " (Out of range)");
-        :log warning ($ScriptName . " - Voltage out of range: " . $VoltageVal . "V");
-      } else={
-        :set VoltageStatus ("✅ " . [$FormatVoltage $VoltageVal]);
+  :if ($MonitorVoltageEnabled = true) do={
+    :onerror VoltErr {
+      :set VoltageVal [ /system/health/get value-name=voltage ];
+      :if ([:typeof $VoltageVal] = "num") do={
+        :if ($VoltageVal < $MonitorVoltageMin || $VoltageVal > $MonitorVoltageMax) do={
+          :set VoltageStatus ("⚠️ " . [$FormatVoltage $VoltageVal] . " (Out of range)");
+          :log warning ($ScriptName . " - Voltage out of range: " . $VoltageVal . "V");
+        } else={
+          :set VoltageStatus ("✅ " . [$FormatVoltage $VoltageVal]);
+        }
       }
-    }
-  } do={ :log debug ($ScriptName . " - No voltage sensor available"); }
+    } do={ :log debug ($ScriptName . " - No voltage sensor available"); }
+  }
 
   # ============================================================================
   # INTERFACE MONITORING (with persistent state and smart alerts)
   # ============================================================================
 
-  :if ([:len $MonitorInterfaces] > 0) do={
+  :if ([:typeof $MonitorInterfacesEnabled] != "bool") do={ :set MonitorInterfacesEnabled true; }
+  :if ([:typeof $MonitorInterfaceMode] != "str") do={ :set MonitorInterfaceMode "whitelist"; }
+
+  :if ($MonitorInterfacesEnabled = true && [:len $MonitorInterfaces] > 0) do={
     # Parse interface list
     :local InterfaceList;
     :if ([:typeof $ParseCSV] = "array") do={
@@ -263,6 +294,23 @@
         } else={ :set Current ($Current . $Char); }
       }
       :if ([:len $Current] > 0) do={ :set ($InterfaceList->[:len $InterfaceList]) $Current; }
+    }
+    
+    # If blacklist mode, get all interfaces and exclude those in list
+    :if ($MonitorInterfaceMode = "blacklist") do={
+      :local AllInterfaces [/interface find];
+      :local FilteredList ({});
+      :foreach IntId in=$AllInterfaces do={
+        :local IntName [/interface get $IntId name];
+        :local InList false;
+        :foreach MonitoredInt in=$InterfaceList do={
+          :if ($IntName = $MonitoredInt) do={ :set InList true; }
+        }
+        :if ($InList = false) do={
+          :set ($FilteredList->[:len $FilteredList]) $IntName;
+        }
+      }
+      :set InterfaceList $FilteredList;
     }
 
     :local StateChanged false;
@@ -338,39 +386,51 @@
   :local ClockTime [/system clock get time];
   
   # Build CPU status
-  :local CpuPercent [$FormatPercent $CheckHealthCPUUtilization];
   :local CpuStatus "";
-  :if ($CheckHealthCPUUtilization > ($MonitorCPUThreshold * 10)) do={
-    :set CpuStatus ("⚠️ " . $CpuPercent . " \\(High\\)");
+  :if ($MonitorCPUEnabled = true) do={
+    :local CpuPercent [$FormatPercent $CheckHealthCPUUtilization];
+    :if ($CheckHealthCPUUtilization > ($MonitorCPUThreshold * 10)) do={
+      :set CpuStatus ("⚠️ " . $CpuPercent . " \\(High\\)");
+    } else={
+      :set CpuStatus ("✅ " . $CpuPercent . " \\(Normal\\)");
+    }
   } else={
-    :set CpuStatus ("✅ " . $CpuPercent . " \\(Normal\\)");
+    :set CpuStatus "Disabled";
   }
   
   # Build RAM status
-  :local RamPercent [$FormatPercent ($RAMPercent * 10)];
-  :local TotalRam [$FormatBytes $TotalRAM];
-  :local FreeRam [$FormatBytes $FreeRAM];
   :local RamStatus "";
-  :if ($RAMPercent >= $MonitorRAMThreshold) do={
-    :set RamStatus ("⚠️ " . $RamPercent . " \\(High\\) \\- " . $TotalRam . " total, " . $FreeRam . " free");
+  :if ($MonitorRAMEnabled = true) do={
+    :local RamPercent [$FormatPercent ($RAMPercent * 10)];
+    :local TotalRam [$FormatBytes $TotalRAM];
+    :local FreeRam [$FormatBytes $FreeRAM];
+    :if ($RAMPercent >= $MonitorRAMThreshold) do={
+      :set RamStatus ("⚠️ " . $RamPercent . " \\(High\\) \\- " . $TotalRam . " total, " . $FreeRam . " free");
+    } else={
+      :set RamStatus ("✅ " . $RamPercent . " \\(Normal\\) \\- " . $TotalRam . " total, " . $FreeRam . " free");
+    }
   } else={
-    :set RamStatus ("✅ " . $RamPercent . " \\(Normal\\) \\- " . $TotalRam . " total, " . $FreeRam . " free");
+    :set RamStatus "Disabled";
   }
   
   # Build Disk status
-  :local DiskPercent [$FormatPercent ($HDDPercent * 10)];
-  :local TotalDisk [$FormatBytes $TotalHDD];
-  :local FreeDisk [$FormatBytes $FreeHDD];
   :local DiskStatus "";
-  :if ($HDDPercent >= $MonitorDiskThreshold) do={
-    :set DiskStatus ("⚠️ " . $DiskPercent . " \\(High\\) \\- " . $TotalDisk . " total, " . $FreeDisk . " free");
+  :if ($MonitorDiskEnabled = true) do={
+    :local DiskPercent [$FormatPercent ($HDDPercent * 10)];
+    :local TotalDisk [$FormatBytes $TotalHDD];
+    :local FreeDisk [$FormatBytes $FreeHDD];
+    :if ($HDDPercent >= $MonitorDiskThreshold) do={
+      :set DiskStatus ("⚠️ " . $DiskPercent . " \\(High\\) \\- " . $TotalDisk . " total, " . $FreeDisk . " free");
+    } else={
+      :set DiskStatus ("✅ " . $DiskPercent . " \\(Normal\\) \\- " . $TotalDisk . " total, " . $FreeDisk . " free");
+    }
   } else={
-    :set DiskStatus ("✅ " . $DiskPercent . " \\(Normal\\) \\- " . $TotalDisk . " total, " . $FreeDisk . " free");
+    :set DiskStatus "Disabled";
   }
   
   # Build Interface status
   :local InterfaceStatus "";
-  :if ([:len $MonitorInterfaces] > 0) do={
+  :if ($MonitorInterfacesEnabled = true && [:len $MonitorInterfaces] > 0) do={
     :local InterfaceList;
     :if ([:typeof $ParseCSV] = "array") do={
       :set InterfaceList [$ParseCSV $MonitorInterfaces];
@@ -405,6 +465,19 @@
     }
   }
   
+  # Build Internet status
+  :local InternetStatus "";
+  :if ([:typeof $MonitorInternetEnabled] != "bool") do={ :set MonitorInternetEnabled true; }
+  :if ($MonitorInternetEnabled = true) do={
+    :if ($CheckHealthInternetConnectivity = true) do={
+      :set InternetStatus "✅ Connected";
+    } else={
+      :set InternetStatus "⚠️ Disconnected";
+    }
+  } else={
+    :set InternetStatus "Disabled";
+  }
+  
   # Build complete message
   :set MonitoringMsg ("⚡ *System Monitoring*\n\n" . \
     "📊 *CPU:* " . $CpuStatus . "\n" . \
@@ -422,9 +495,79 @@
   
   :set MonitoringMsg ($MonitoringMsg . $InterfaceStatus . "\n⏰ *Last update:* " . $ClockTime);
   
+  # Create buttons for monitoring message
+  :global CreateInlineKeyboard;
+  :local Buttons ({({
+    {text="🔄 Update Now"; callback_data="monitoring:refresh"};
+    {text="📱 Connected Devices"; callback_data="monitoring:devices"}
+  }, {
+    {text="📋 Menu"; callback_data="cmd:/menu"};
+    {text="⚙️ Command"; callback_data="monitoring:command"}
+  }});
+  :local KeyboardJson "";
+  :if ([:typeof $CreateInlineKeyboard] = "array") do={
+    :set KeyboardJson [$CreateInlineKeyboard $Buttons];
+  }
+  
   # Update single monitoring message (only if monitoring is enabled)
   :if ([:typeof $GetOrCreateMonitoringMessage] = "array" && $EnableAutoMonitoring = true) do={
-    [$GetOrCreateMonitoringMessage $TelegramChatId $MonitoringMsg];
+    [$GetOrCreateMonitoringMessage $TelegramChatId $MonitoringMsg $KeyboardJson];
+  }
+
+  # ============================================================================
+  # GET CONNECTED DEVICES FUNCTION (Global - can be called from anywhere)
+  # ============================================================================
+  
+  :global GetConnectedDevices do={
+    :global FormatBytes;
+    :local DevicesMsg ("📱 *Connected Devices*\n\n");
+    :local DeviceCount 0;
+    
+    :onerror DHCPErr {
+      :foreach Lease in=[/ip/dhcp-server/lease find where status=bound] do={
+        :local LeaseData [/ip/dhcp-server/lease get $Lease];
+        :local IP ($LeaseData->"address");
+        :local MAC ($LeaseData->"mac-address");
+        :local Hostname ($LeaseData->"host-name");
+        :local Interface ($LeaseData->"interface");
+        
+        # Get TX bytes from interface statistics
+        :local TxBytes 0;
+        :onerror IntErr {
+          :local IntFound [/interface find where name=$Interface];
+          :if ([:len $IntFound] > 0) do={
+            :local IntData [/interface get $IntFound];
+            :set TxBytes ($IntData->"tx-byte");
+          }
+        } do={ }
+        
+        :set DeviceCount ($DeviceCount + 1);
+        :local DeviceName $Hostname;
+        :if ([:len $DeviceName] = 0) do={ :set DeviceName $MAC; }
+        
+        :set DevicesMsg ($DevicesMsg . "• *" . $DeviceName . "*\n");
+        :set DevicesMsg ($DevicesMsg . "  IP: `" . $IP . "`\n");
+        :set DevicesMsg ($DevicesMsg . "  MAC: `" . $MAC . "`\n");
+        :if ($TxBytes > 0 && [:typeof $FormatBytes] = "array") do={
+          :set DevicesMsg ($DevicesMsg . "  TX: " . [$FormatBytes $TxBytes] . "\n");
+        }
+        :set DevicesMsg ($DevicesMsg . "  Interface: " . $Interface . "\n\n");
+        
+        # Limit to 20 devices to avoid message length issues
+        :if ($DeviceCount >= 20) do={
+          :set DevicesMsg ($DevicesMsg . "_Showing first 20 devices_\n");
+          :break;
+        }
+      }
+    } do={
+      :set DevicesMsg ($DevicesMsg . "_Error reading DHCP leases_");
+    }
+    
+    :if ($DeviceCount = 0) do={
+      :set DevicesMsg ($DevicesMsg . "_No connected devices_");
+    }
+    
+    :return $DevicesMsg;
   }
 
   # ============================================================================
@@ -437,21 +580,16 @@
     :if ([:len $PingResult] > 0) do={ :set InternetUp true; }
   } do={ :set InternetUp false; }
   
-  :if ($InternetUp = false && $CheckHealthInternetConnectivity = true) do={
-    :set CheckHealthInternetConnectivity false;
-    :log warning ($ScriptName . " - Internet connectivity lost");
-  }
-  
-  :if ($InternetUp = true && $CheckHealthInternetConnectivity = false) do={
-    :set CheckHealthInternetConnectivity true;
-    :log info ($ScriptName . " - Internet connectivity restored");
-  }
-  
-  :local InternetStatus "";
-  :if ($CheckHealthInternetConnectivity = true) do={
-    :set InternetStatus "✅ Connected";
-  } else={
-    :set InternetStatus "⚠️ Disconnected";
+  :if ($MonitorInternetEnabled = true) do={
+    :if ($InternetUp = false && $CheckHealthInternetConnectivity = true) do={
+      :set CheckHealthInternetConnectivity false;
+      :log warning ($ScriptName . " - Internet connectivity lost");
+    }
+    
+    :if ($InternetUp = true && $CheckHealthInternetConnectivity = false) do={
+      :set CheckHealthInternetConnectivity true;
+      :log info ($ScriptName . " - Internet connectivity restored");
+    }
   }
 
   # ============================================================================
