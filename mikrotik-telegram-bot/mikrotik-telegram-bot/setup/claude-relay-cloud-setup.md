@@ -1,8 +1,8 @@
-﻿# Claude Relay Cloud Server Setup
+# Claude Relay Cloud Server Setup
 
 Quick guide for setting up Claude Code Relay Node with MikroTik Cloud server access.
 
-> Crafted with love & frustration by P̷h̷e̷n̷i̷x̷
+Crafted with love & frustration by P̷h̷e̷n̷i̷x̷
 
 ## Overview
 
@@ -132,4 +132,4 @@ The handshake verifies the router's identity:
 
 ---
 
-> Crafted with love & frustration by P̷h̷e̷n̷i̷x̷
+Crafted with love & frustration by P̷h̷e̷n̷i̷x̷

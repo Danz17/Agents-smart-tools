@@ -1,4 +1,4 @@
-﻿#!rsc by RouterOS
+#!rsc by RouterOS
 # ═══════════════════════════════════════════════════════════════════════════
 # TxMTC - Telegram x MikroTik Tunnel Controller Sub-Agent
 # Configuration
@@ -93,7 +93,7 @@
 # Interface monitoring
 # Monitor these interfaces for status and errors
 :global MonitorInterfaces "ether1,ether2,bridge,wlan1"
-# Mode: whitelist or blacklist
+# Monitoring interface list mode: "whitelist" or "blacklist"
 :global MonitorInterfaceMode "whitelist"
 
 # Monitoring type toggles

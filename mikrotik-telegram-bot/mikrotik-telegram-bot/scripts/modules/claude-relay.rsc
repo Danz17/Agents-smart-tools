@@ -1,11 +1,11 @@
 ﻿#!rsc by RouterOS
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# ═══════════════════════════════════════════════════════════════════════════
 # TxMTC - Telegram x MikroTik Tunnel Controller Sub-Agent
 # Claude Code Relay Module
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ───────────────────────────────────────────────────────────────────────────
 # GitHub: https://github.com/Danz17/Agents-smart-tools
-# Author: PÌ·hÌ·eÌ·nÌ·iÌ·xÌ· | Crafted with love & frustration
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# Author: P̷h̷e̷n̷i̷x̷ | Crafted with love & frustration
+# ═══════════════════════════════════════════════════════════════════════════
 #
 # requires RouterOS, version=7.15
 #
@@ -95,10 +95,10 @@
     :local CheckCert [$CertificateAvailable "ISRG Root X1"];
     :local Data;
     :if ($CheckCert = false) do={
-      :set Data ([ /tool/fetch check-certificate=no output=user \
+      :set Data ([ /tool/fetch check-certificate=no output=user timeout=$TimeoutNum \
         url=$HealthURL as-value ]->"data");
     } else={
-      :set Data ([ /tool/fetch check-certificate=yes-without-crl output=user \
+      :set Data ([ /tool/fetch check-certificate=yes-without-crl output=user timeout=$TimeoutNum \
         url=$HealthURL as-value ]->"data");
     }
     
@@ -135,12 +135,12 @@
     :local CheckCert [$CertificateAvailable "ISRG Root X1"];
     :local Data;
     :if ($CheckCert = false) do={
-      :set Data ([ /tool/fetch check-certificate=no output=user http-method=post \
+      :set Data ([ /tool/fetch check-certificate=no output=user http-method=post timeout=$TimeoutNum \
         http-header-field="Content-Type: application/json" \
         http-data=$RequestBody \
         url=$ProcessURL as-value ]->"data");
     } else={
-      :set Data ([ /tool/fetch check-certificate=yes-without-crl output=user http-method=post \
+      :set Data ([ /tool/fetch check-certificate=yes-without-crl output=user http-method=post timeout=$TimeoutNum \
         http-header-field="Content-Type: application/json" \
         http-data=$RequestBody \
         url=$ProcessURL as-value ]->"data");
@@ -229,12 +229,12 @@
     :local CheckCert [$CertificateAvailable "ISRG Root X1"];
     :local Data;
     :if ($CheckCert = false) do={
-      :set Data ([ /tool/fetch check-certificate=no output=user http-method=post \
+      :set Data ([ /tool/fetch check-certificate=no output=user http-method=post timeout=$TimeoutNum \
         http-header-field="Content-Type: application/json" \
         http-data=$RequestBody \
         url=$SuggestURL as-value ]->"data");
     } else={
-      :set Data ([ /tool/fetch check-certificate=yes-without-crl output=user http-method=post \
+      :set Data ([ /tool/fetch check-certificate=yes-without-crl output=user http-method=post timeout=$TimeoutNum \
         http-header-field="Content-Type: application/json" \
         http-data=$RequestBody \
         url=$SuggestURL as-value ]->"data");
@@ -288,12 +288,12 @@
     :local CheckCert [$CertificateAvailable "ISRG Root X1"];
     :local Data;
     :if ($CheckCert = false) do={
-      :set Data ([ /tool/fetch check-certificate=no output=user http-method=post \
+      :set Data ([ /tool/fetch check-certificate=no output=user http-method=post timeout=$TimeoutNum \
         http-header-field="Content-Type: application/json" \
         http-data=$RequestBody \
         url=$HandshakeURL as-value ]->"data");
     } else={
-      :set Data ([ /tool/fetch check-certificate=yes-without-crl output=user http-method=post \
+      :set Data ([ /tool/fetch check-certificate=yes-without-crl output=user http-method=post timeout=$TimeoutNum \
         http-header-field="Content-Type: application/json" \
         http-data=$RequestBody \
         url=$HandshakeURL as-value ]->"data");
