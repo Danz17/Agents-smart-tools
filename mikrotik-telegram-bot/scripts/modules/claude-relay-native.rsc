@@ -256,6 +256,177 @@
 }
 
 # ============================================================================
+# DEVICE AUTHORIZATION (Get API Key via Browser)
+# ============================================================================
+
+:global RequestDeviceAuthorization do={
+  :global ClaudeRelayURL;
+  :global Identity;
+  :global CertificateAvailable;
+  :global UrlEncode;
+  
+  # Check if service URL is configured
+  :if ([:len $ClaudeRelayURL] = 0) do={
+    :return ({success=false; error="Claude relay service URL not configured"});
+  }
+  
+  # Get router identity
+  :local RouterId [/system identity get name];
+  :local RouterIdentity $Identity;
+  :if ([:len $RouterIdentity] = 0) do={
+    :set RouterIdentity $RouterId;
+  }
+  
+  # Build request
+  :local AuthURL ($ClaudeRelayURL . "/auth/request");
+  :local RequestBody ("{\"router_id\":\"" . [$UrlEncode $RouterId] . \
+    "\",\"router_identity\":\"" . [$UrlEncode $RouterIdentity] . "\"}");
+  
+  :local TimeoutNum [:totime "30s"];
+  :onerror AuthErr {
+    :local CheckCert [$CertificateAvailable "ISRG Root X1"];
+    :local Data;
+    :if ($CheckCert = false) do={
+      :set Data ([ /tool/fetch check-certificate=no output=user http-method=post timeout=$TimeoutNum \
+        http-header-field="Content-Type: application/json" \
+        http-data=$RequestBody \
+        $AuthURL as-value ]->"data");
+    } else={
+      :set Data ([ /tool/fetch check-certificate=yes-without-crl output=user http-method=post timeout=$TimeoutNum \
+        http-header-field="Content-Type: application/json" \
+        http-data=$RequestBody \
+        $AuthURL as-value ]->"data");
+    }
+    
+    :if ([:len $Data] > 0) do={
+      :local Response [ :deserialize from=json $Data ];
+      
+      :if (($Response->"success") = true) do={
+        :local DeviceCode ($Response->"device_code");
+        :local AuthURL ($Response->"authorization_url");
+        :log info ("claude-relay-native - Authorization requested. Visit: " . $AuthURL);
+        :return ({success=true; device_code=$DeviceCode; authorization_url=$AuthURL; message=($Response->"message")});
+      } else={
+        :local ErrorMsg ($Response->"error");
+        :return ({success=false; error=$ErrorMsg});
+      }
+    }
+    :return ({success=false; error="Empty response from authorization service"});
+  } do={
+    :return ({success=false; error=$AuthErr});
+  }
+}
+
+:global PollDeviceAuthorization do={
+  :local DeviceCode [ :tostr $1 ];
+  :global ClaudeRelayURL;
+  :global CertificateAvailable;
+  
+  # Check if service URL is configured
+  :if ([:len $ClaudeRelayURL] = 0) do={
+    :return ({success=false; error="Claude relay service URL not configured"; authorized=false});
+  }
+  
+  # Build request
+  :local PollURL ($ClaudeRelayURL . "/auth/poll");
+  :local RequestBody ("{\"device_code\":\"" . $DeviceCode . "\"}");
+  
+  :local TimeoutNum [:totime "10s"];
+  :onerror PollErr {
+    :local CheckCert [$CertificateAvailable "ISRG Root X1"];
+    :local Data;
+    :if ($CheckCert = false) do={
+      :set Data ([ /tool/fetch check-certificate=no output=user http-method=post timeout=$TimeoutNum \
+        http-header-field="Content-Type: application/json" \
+        http-data=$RequestBody \
+        $PollURL as-value ]->"data");
+    } else={
+      :set Data ([ /tool/fetch check-certificate=yes-without-crl output=user http-method=post timeout=$TimeoutNum \
+        http-header-field="Content-Type: application/json" \
+        http-data=$RequestBody \
+        $PollURL as-value ]->"data");
+    }
+    
+    :if ([:len $Data] > 0) do={
+      :local Response [ :deserialize from=json $Data ];
+      
+      :if (($Response->"success") = true) do={
+        :if (($Response->"authorized") = true) do={
+          :local APIKey ($Response->"api_key");
+          :return ({success=true; authorized=true; api_key=$APIKey});
+        } else={
+          :return ({success=true; authorized=false; status=($Response->"status"); message=($Response->"message")});
+        }
+      } else={
+        :local ErrorMsg ($Response->"error");
+        :return ({success=false; error=$ErrorMsg; authorized=false});
+      }
+    }
+    :return ({success=false; error="Empty response from authorization service"; authorized=false});
+  } do={
+    :return ({success=false; error=$PollErr; authorized=false});
+  }
+}
+
+:global AuthorizeDevice do={
+  :global ClaudeRelayURL;
+  :global ClaudeAPIKey;
+  :global RequestDeviceAuthorization;
+  :global PollDeviceAuthorization;
+  
+  # Request authorization
+  :local AuthRequest [$RequestDeviceAuthorization];
+  
+  :if (($AuthRequest->"success") = true) do={
+    :local DeviceCode ($AuthRequest->"device_code");
+    :local AuthURL ($AuthRequest->"authorization_url");
+    
+    :log info ("claude-relay-native - Device authorization requested");
+    :log info ("claude-relay-native - Authorization URL: " . $AuthURL);
+    :log info ("claude-relay-native - Device Code: " . $DeviceCode);
+    :log info ("claude-relay-native - Please visit the URL above and enter your Claude API key");
+    :log info ("claude-relay-native - Polling for authorization...");
+    
+    # Poll for authorization (up to 5 minutes, every 5 seconds)
+    :local MaxAttempts 60;
+    :local Attempt 0;
+    :local Authorized false;
+    
+    :while ($Attempt < $MaxAttempts && $Authorized = false) do={
+      :delay 5s;
+      :set Attempt ($Attempt + 1);
+      
+      :local PollResult [$PollDeviceAuthorization $DeviceCode];
+      
+      :if (($PollResult->"success") = true) do={
+        :if (($PollResult->"authorized") = true) do={
+          :set Authorized true;
+          :set ClaudeAPIKey ($PollResult->"api_key");
+          :log info "claude-relay-native - Device authorized successfully! API key stored.";
+          :return ({success=true; api_key=$ClaudeAPIKey; message="Device authorized and API key stored"});
+        } else={
+          :if (($Attempt % 12) = 0) do={
+            :log info ("claude-relay-native - Still waiting for authorization... (" . $Attempt . "/" . $MaxAttempts . ")");
+          }
+        }
+      } else={
+        :local ErrorMsg ($PollResult->"error");
+        :log warning ("claude-relay-native - Poll error: " . $ErrorMsg);
+      }
+    }
+    
+    :if ($Authorized = false) do={
+      :log warning "claude-relay-native - Authorization timeout. Please try again.";
+      :return ({success=false; error="Authorization timeout - user did not authorize within 5 minutes"});
+    }
+  } else={
+    :local ErrorMsg ($AuthRequest->"error");
+    :log error ("claude-relay-native - Failed to request authorization: " . $ErrorMsg);
+    :return ({success=false; error=$ErrorMsg});
+  }
+}
+
+# ============================================================================
 # MODULE LOADED FLAG
 # ============================================================================
 

@@ -11,10 +11,12 @@ import os
 import json
 import logging
 import threading
+import secrets
+import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Optional, Any
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template_string
 from flask_cors import CORS
 import requests
 
@@ -49,6 +51,12 @@ executor = ThreadPoolExecutor(max_workers=CONFIG['max_workers'])
 
 # Load RouterOS knowledge base
 ROUTEROS_KNOWLEDGE = {}
+
+# Device authorization storage (in-memory, can be persisted to file)
+# Structure: {device_code: {api_key, router_id, router_identity, created_at, expires_at, authorized_at}}
+DEVICE_AUTHORIZATIONS = {}
+AUTHORIZATION_LOCK = threading.Lock()
+AUTHORIZATION_EXPIRY_HOURS = 24  # Device codes expire after 24 hours
 
 
 def load_knowledge_base() -> Dict[str, Any]:
@@ -444,6 +452,370 @@ def handshake():
         }), 500
 
 
+# ============================================================================
+# DEVICE AUTHORIZATION HELPERS
+# ============================================================================
+
+def generate_device_code() -> str:
+    """Generate a unique device authorization code."""
+    return secrets.token_urlsafe(32)
+
+
+def cleanup_expired_authorizations():
+    """Remove expired device authorizations."""
+    with AUTHORIZATION_LOCK:
+        current_time = datetime.utcnow()
+        expired_codes = [
+            code for code, auth in DEVICE_AUTHORIZATIONS.items()
+            if auth.get('expires_at') and auth['expires_at'] < current_time
+        ]
+        for code in expired_codes:
+            del DEVICE_AUTHORIZATIONS[code]
+        if expired_codes:
+            logger.info(f"Cleaned up {len(expired_codes)} expired device authorizations")
+
+
+def get_authorization_url(device_code: str, base_url: str = None) -> str:
+    """Generate authorization URL for device code."""
+    if base_url is None:
+        # Try to determine base URL from request
+        base_url = request.host_url.rstrip('/')
+        if CONFIG['enable_cloud']:
+            # Use cloud port if available
+            base_url = base_url.replace(f":{CONFIG['port']}", f":{CONFIG['cloud_port']}")
+    
+    return f"{base_url}/auth/{device_code}"
+
+
+# ============================================================================
+# DEVICE AUTHORIZATION ENDPOINTS
+# ============================================================================
+
+@app.route('/auth/request', methods=['POST'])
+def request_device_authorization():
+    """Request device authorization - generates device code and returns authorization URL."""
+    try:
+        data = request.get_json() or {}
+        
+        router_id = data.get('router_id', '')
+        router_identity = data.get('router_identity', '')
+        
+        if not router_id:
+            router_id = data.get('device_id', '')
+        
+        if not router_id:
+            return jsonify({
+                "success": False,
+                "error": "Missing 'router_id' or 'device_id' in request"
+            }), 400
+        
+        # Generate device code
+        device_code = generate_device_code()
+        
+        # Store authorization request
+        with AUTHORIZATION_LOCK:
+            DEVICE_AUTHORIZATIONS[device_code] = {
+                'api_key': None,
+                'router_id': router_id,
+                'router_identity': router_identity or router_id,
+                'created_at': datetime.utcnow(),
+                'expires_at': datetime.utcnow() + timedelta(hours=AUTHORIZATION_EXPIRY_HOURS),
+                'authorized_at': None,
+                'status': 'pending'
+            }
+        
+        # Generate authorization URL
+        auth_url = get_authorization_url(device_code)
+        
+        logger.info(f"Device authorization requested: router_id={router_id}, device_code={device_code[:8]}...")
+        
+        return jsonify({
+            "success": True,
+            "device_code": device_code,
+            "authorization_url": auth_url,
+            "expires_in": AUTHORIZATION_EXPIRY_HOURS * 3600,  # seconds
+            "message": f"Visit this URL to authorize: {auth_url}"
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in request_device_authorization: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/auth/<device_code>', methods=['GET', 'POST'])
+def device_authorization_page(device_code: str):
+    """Web page for user to enter API key for device authorization."""
+    try:
+        # Cleanup expired codes
+        cleanup_expired_authorizations()
+        
+        # Get authorization info
+        with AUTHORIZATION_LOCK:
+            auth_info = DEVICE_AUTHORIZATIONS.get(device_code)
+        
+        if not auth_info:
+            return render_template_string("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Device Authorization - Invalid Code</title>
+                <style>
+                    body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+                    .error { background: #fee; border: 1px solid #fcc; padding: 15px; border-radius: 5px; color: #c00; }
+                </style>
+            </head>
+            <body>
+                <h1>❌ Invalid Authorization Code</h1>
+                <div class="error">
+                    <p>This authorization code is invalid or has expired.</p>
+                    <p>Please request a new authorization code from your router.</p>
+                </div>
+            </body>
+            </html>
+            """), 404
+        
+        # Check if already authorized
+        if auth_info.get('api_key'):
+            return render_template_string("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Device Authorization - Already Authorized</title>
+                <style>
+                    body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+                    .success { background: #efe; border: 1px solid #cfc; padding: 15px; border-radius: 5px; color: #0a0; }
+                </style>
+            </head>
+            <body>
+                <h1>✅ Device Already Authorized</h1>
+                <div class="success">
+                    <p><strong>Router:</strong> {{ router_identity }}</p>
+                    <p>This device has already been authorized.</p>
+                    <p>You can close this page.</p>
+                </div>
+            </body>
+            </html>
+            """, router_identity=auth_info.get('router_identity', 'Unknown'))
+        
+        # Handle POST (API key submission)
+        if request.method == 'POST':
+            api_key = request.form.get('api_key', '').strip()
+            
+            if not api_key or len(api_key) < 10:
+                return render_template_string("""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Device Authorization - Error</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+                        .error { background: #fee; border: 1px solid #fcc; padding: 15px; border-radius: 5px; color: #c00; }
+                        form { margin-top: 20px; }
+                    </style>
+                </head>
+                <body>
+                    <h1>Device Authorization</h1>
+                    <div class="error">
+                        <p>Invalid API key. Please enter a valid Claude API key.</p>
+                    </div>
+                    <form method="POST">
+                        <label>Claude API Key:</label><br>
+                        <input type="text" name="api_key" style="width: 100%; padding: 8px; margin: 10px 0;" placeholder="sk-ant-api03-..."><br>
+                        <button type="submit" style="padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">Authorize Device</button>
+                    </form>
+                </body>
+                </html>
+                """)
+            
+            # Validate API key format (basic check)
+            if not api_key.startswith('sk-ant-'):
+                return render_template_string("""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Device Authorization - Error</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+                        .error { background: #fee; border: 1px solid #fcc; padding: 15px; border-radius: 5px; color: #c00; }
+                        form { margin-top: 20px; }
+                    </style>
+                </head>
+                <body>
+                    <h1>Device Authorization</h1>
+                    <div class="error">
+                        <p>Invalid API key format. Claude API keys should start with 'sk-ant-'.</p>
+                    </div>
+                    <form method="POST">
+                        <label>Claude API Key:</label><br>
+                        <input type="text" name="api_key" style="width: 100%; padding: 8px; margin: 10px 0;" placeholder="sk-ant-api03-..."><br>
+                        <button type="submit" style="padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">Authorize Device</button>
+                    </form>
+                </body>
+                </html>
+                """)
+            
+            # Store API key
+            with AUTHORIZATION_LOCK:
+                if device_code in DEVICE_AUTHORIZATIONS:
+                    DEVICE_AUTHORIZATIONS[device_code]['api_key'] = api_key
+                    DEVICE_AUTHORIZATIONS[device_code]['authorized_at'] = datetime.utcnow()
+                    DEVICE_AUTHORIZATIONS[device_code]['status'] = 'authorized'
+            
+            logger.info(f"Device authorized: router_id={auth_info.get('router_id')}, device_code={device_code[:8]}...")
+            
+            return render_template_string("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Device Authorization - Success</title>
+                <style>
+                    body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+                    .success { background: #efe; border: 1px solid #cfc; padding: 15px; border-radius: 5px; color: #0a0; }
+                    .info { background: #eef; border: 1px solid #ccf; padding: 15px; border-radius: 5px; margin-top: 15px; }
+                </style>
+            </head>
+            <body>
+                <h1>✅ Device Authorized Successfully!</h1>
+                <div class="success">
+                    <p><strong>Router:</strong> {{ router_identity }}</p>
+                    <p>Your router has been authorized and can now use Claude API.</p>
+                    <p>You can close this page.</p>
+                </div>
+                <div class="info">
+                    <p><strong>Note:</strong> The API key is now stored on your router and tied to this device only.</p>
+                </div>
+            </body>
+            </html>
+            """, router_identity=auth_info.get('router_identity', 'Unknown'))
+        
+        # GET - Show authorization form
+        return render_template_string("""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Device Authorization</title>
+            <style>
+                body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; background: #f5f5f5; }
+                .container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                h1 { color: #333; }
+                .info { background: #e3f2fd; border-left: 4px solid #2196F3; padding: 15px; margin: 20px 0; }
+                .warning { background: #fff3e0; border-left: 4px solid #ff9800; padding: 15px; margin: 20px 0; }
+                label { display: block; margin: 15px 0 5px 0; font-weight: bold; color: #555; }
+                input[type="text"] { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 5px; font-size: 14px; box-sizing: border-box; }
+                input[type="text"]:focus { border-color: #007bff; outline: none; }
+                button { padding: 12px 30px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; margin-top: 10px; }
+                button:hover { background: #0056b3; }
+                .help { margin-top: 20px; padding: 15px; background: #f9f9f9; border-radius: 5px; font-size: 14px; color: #666; }
+                .help a { color: #007bff; text-decoration: none; }
+                .help a:hover { text-decoration: underline; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>🔐 Authorize Router Device</h1>
+                
+                <div class="info">
+                    <p><strong>Router:</strong> {{ router_identity }}</p>
+                    <p><strong>Device ID:</strong> {{ router_id }}</p>
+                </div>
+                
+                <div class="warning">
+                    <p><strong>⚠️ Security Notice:</strong></p>
+                    <p>This API key will be stored on your router and will only work for this specific device.</p>
+                </div>
+                
+                <form method="POST">
+                    <label for="api_key">Enter your Claude API Key:</label>
+                    <input type="text" id="api_key" name="api_key" placeholder="sk-ant-api03-..." required>
+                    
+                    <button type="submit">✅ Authorize Device</button>
+                </form>
+                
+                <div class="help">
+                    <p><strong>How to get your Claude API Key:</strong></p>
+                    <ol>
+                        <li>Visit <a href="https://console.anthropic.com/" target="_blank">Anthropic Console</a></li>
+                        <li>Sign in or create an account</li>
+                        <li>Go to API Keys section</li>
+                        <li>Create a new API key or use an existing one</li>
+                        <li>Copy the key (starts with <code>sk-ant-</code>)</li>
+                        <li>Paste it above and click "Authorize Device"</li>
+                    </ol>
+                </div>
+            </div>
+        </body>
+        </html>
+        """, router_identity=auth_info.get('router_identity', 'Unknown'), router_id=auth_info.get('router_id', 'Unknown'))
+        
+    except Exception as e:
+        logger.error(f"Error in device_authorization_page: {e}")
+        return f"Error: {str(e)}", 500
+
+
+@app.route('/auth/poll', methods=['POST'])
+def poll_device_authorization():
+    """Poll for device authorization status - router checks if API key is available."""
+    try:
+        data = request.get_json() or {}
+        device_code = data.get('device_code', '')
+        
+        if not device_code:
+            return jsonify({
+                "success": False,
+                "error": "Missing 'device_code' in request"
+            }), 400
+        
+        # Cleanup expired codes
+        cleanup_expired_authorizations()
+        
+        # Get authorization info
+        with AUTHORIZATION_LOCK:
+            auth_info = DEVICE_AUTHORIZATIONS.get(device_code)
+        
+        if not auth_info:
+            return jsonify({
+                "success": False,
+                "error": "Invalid or expired device code",
+                "authorized": False
+            }), 404
+        
+        # Check if authorized
+        if auth_info.get('api_key') and auth_info.get('status') == 'authorized':
+            api_key = auth_info['api_key']
+            
+            # Optionally remove from storage after retrieval (one-time use)
+            # Or keep it for re-authorization
+            # del DEVICE_AUTHORIZATIONS[device_code]
+            
+            logger.info(f"Device authorization retrieved: router_id={auth_info.get('router_id')}, device_code={device_code[:8]}...")
+            
+            return jsonify({
+                "success": True,
+                "authorized": True,
+                "api_key": api_key,
+                "router_id": auth_info.get('router_id'),
+                "router_identity": auth_info.get('router_identity'),
+                "authorized_at": auth_info.get('authorized_at').isoformat() if auth_info.get('authorized_at') else None
+            })
+        else:
+            return jsonify({
+                "success": True,
+                "authorized": False,
+                "status": auth_info.get('status', 'pending'),
+                "message": "Authorization pending - user has not yet authorized this device"
+            })
+        
+    except Exception as e:
+        logger.error(f"Error in poll_device_authorization: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
 @app.route('/suggest-error-fix', methods=['POST'])
 def suggest_error_fix():
     """Analyze command error and suggest fixes using Claude."""
@@ -557,6 +929,9 @@ if __name__ == '__main__':
         cloud_app.add_url_rule('/process-command', 'process_command', process_command, methods=['POST'])
         cloud_app.add_url_rule('/suggest-error-fix', 'suggest_error_fix', suggest_error_fix, methods=['POST'])
         cloud_app.add_url_rule('/handshake', 'handshake', handshake, methods=['POST'])
+        cloud_app.add_url_rule('/auth/request', 'request_device_authorization', request_device_authorization, methods=['POST'])
+        cloud_app.add_url_rule('/auth/<device_code>', 'device_authorization_page', device_authorization_page, methods=['GET', 'POST'])
+        cloud_app.add_url_rule('/auth/poll', 'poll_device_authorization', poll_device_authorization, methods=['POST'])
         
         def run_cloud_server():
             cloud_app.run(

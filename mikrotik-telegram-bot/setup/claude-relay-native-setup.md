@@ -31,7 +31,34 @@ Native mode allows the router to directly call Claude API using RouterOS scripts
 
 ### Step 2: Configure RouterOS
 
-Connect to your router and run:
+You have two options for setting the API key:
+
+#### Option A: Device Authorization (Recommended) 🔐
+
+Use the secure browser-based authorization flow:
+
+```routeros
+# Enable native Claude relay
+:global ClaudeRelayNativeEnabled true
+
+# Set Claude relay service URL (where Python service is running)
+:global ClaudeRelayURL "http://your-server:5000"
+
+# Load module
+/system script run modules/claude-relay-native
+
+# Request authorization (via Telegram: /authorize-claude)
+:global AuthorizeDevice
+[$AuthorizeDevice]
+```
+
+Then visit the authorization URL in your browser and enter your API key.
+
+**See**: [claude-relay-device-auth.md](claude-relay-device-auth.md) for detailed instructions.
+
+#### Option B: Manual Configuration
+
+Set the API key directly:
 
 ```routeros
 # Enable native Claude relay
@@ -99,11 +126,20 @@ The bot should translate and execute it!
 **Important**: In native mode, your Claude API key is stored on the router.
 
 **Best Practices:**
-1. Use router user permissions to restrict script access
-2. Don't share router access with untrusted users
-3. Rotate API key regularly
-4. Monitor API usage in Anthropic console
-5. Consider using read-only API keys if available
+1. ✅ **Use device authorization** instead of manual entry (more secure)
+2. Use router user permissions to restrict script access
+3. Don't share router access with untrusted users
+4. Rotate API key regularly
+5. Monitor API usage in Anthropic console
+6. Consider using read-only API keys if available
+
+**Device Authorization** provides better security by:
+- Not exposing API key in command history
+- Using time-limited authorization codes
+- Device-specific token binding
+- Browser-based secure entry
+
+See [claude-relay-device-auth.md](claude-relay-device-auth.md) for device authorization setup.
 
 ## Troubleshooting
 

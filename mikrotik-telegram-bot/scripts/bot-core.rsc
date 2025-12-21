@@ -533,8 +533,9 @@
             "`/modules` - Install/manage modules\n" . \
             "`/scripts` - List available scripts\n" . \
             "`/settings` - User preferences\n" . \
-            "`/cleanup` - Clean old messages\n\n" . \
-            "─── by P̷h̷e̷n̷i̷x̷");
+            "`/cleanup` - Clean old messages\n" . \
+            ([:typeof $ClaudeRelayNativeEnabled] = "bool" && $ClaudeRelayNativeEnabled = true ? "`/authorize-claude` - Authorize Claude API\n" : "") . \
+            "\n─── by P̷h̷e̷n̷i̷x̷");
 
           :local HelpCmds ({{"/status"; "/interfaces"; "/dhcp"; "/logs"; "/menu"; "/modules"}});
           :local HelpButtons [$CreateCommandButtons $HelpCmds];
@@ -685,6 +686,47 @@
             [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $ErrorMsg ({}) $ThreadId [:tostr ($Message->"message_id")]];
           }
           :set Done true;
+        }
+        
+        # Handle /authorize-claude command (Device Authorization)
+        :if ($Done = false && $Command = "/authorize-claude") do={
+          :global ClaudeRelayNativeEnabled;
+          :global ClaudeRelayURL;
+          :global AuthorizeDevice;
+          
+          :if ([:typeof $ClaudeRelayNativeEnabled] != "bool" || $ClaudeRelayNativeEnabled != true) do={
+            :local ErrorMsg "🔐 *Claude Authorization*\n\nNative Claude relay is not enabled\\.\n\nEnable it first:\n`:global ClaudeRelayNativeEnabled true`";
+            [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $ErrorMsg ({}) $ThreadId [:tostr ($Message->"message_id")]];
+            :set Done true;
+          } else={
+            :if ([:len $ClaudeRelayURL] = 0) do={
+              :local ErrorMsg "🔐 *Claude Authorization*\n\nClaude relay service URL not configured\\.\n\nSet it first:\n`:global ClaudeRelayURL \"http://your-server:5000\"`";
+              [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $ErrorMsg ({}) $ThreadId [:tostr ($Message->"message_id")]];
+              :set Done true;
+            } else={
+              :if ([:typeof $AuthorizeDevice] = "array") do={
+                :local AuthMsg "🔐 *Starting Device Authorization*\n\nRequesting authorization code\\.\\.\\.";
+                [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $AuthMsg ({}) $ThreadId [:tostr ($Message->"message_id")]];
+                
+                # Run authorization in background (non-blocking)
+                :local AuthResult [$AuthorizeDevice];
+                
+                :if (($AuthResult->"success") = true) do={
+                  :local SuccessMsg "✅ *Device Authorized Successfully\\!*\n\nYour Claude API key has been stored on this router\\.\n\nYou can now use smart commands\\!";
+                  :local SuccessCmds ({{"/help"; "/status"}});
+                  :local SuccessButtons [$CreateCommandButtons $SuccessCmds];
+                  [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $SuccessMsg $SuccessButtons $ThreadId [:tostr ($Message->"message_id")]];
+                } else={
+                  :local ErrorMsg ("❌ *Authorization Failed*\n\n" . ($AuthResult->"error") . "\n\nPlease try again or check the service URL\\.");
+                  [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $ErrorMsg ({}) $ThreadId [:tostr ($Message->"message_id")]];
+                }
+              } else={
+                :local ErrorMsg "🔐 *Claude Authorization*\n\nAuthorization function not available\\.\n\nMake sure `claude-relay-native` module is loaded\\.";
+                [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $ErrorMsg ({}) $ThreadId [:tostr ($Message->"message_id")]];
+              }
+              :set Done true;
+            }
+          }
         }
         
         # Handle /monitor-interfaces command

@@ -119,6 +119,12 @@ When Claude Code Relay Node is enabled, you can use natural language:
   - See [setup/claude-relay-setup.md](setup/claude-relay-setup.md)
 - **Comparison**: See [setup/claude-relay-comparison.md](setup/claude-relay-comparison.md)
 
+**🔐 Device Authorization** - Secure browser-based API key setup:
+- Router generates unique authorization code
+- Visit URL in browser to enter API key securely
+- API key tied to specific device only
+- See [setup/claude-relay-device-auth.md](setup/claude-relay-device-auth.md)
+
 ---
 
 ## Project Structure
