@@ -91,7 +91,7 @@
   :local HealthURL ($ClaudeRelayURL . "/health");
   :local TimeoutNum [:totime $ClaudeRelayTimeout];
   
-  :onerror HealthErr {
+  :onerror HealthErr in={
     :local CheckCert [$CertificateAvailable "ISRG Root X1"];
     :local Data;
     :if ($CheckCert = false) do={
@@ -131,7 +131,7 @@
   # Build JSON request body
   :local RequestBody ("{\"command\":\"" . [$UrlEncode $Command] . "\",\"context\":{}}");
   
-  :onerror RequestErr {
+  :onerror RequestErr in={
     :local CheckCert [$CertificateAvailable "ISRG Root X1"];
     :local Data;
     :if ($CheckCert = false) do={
@@ -225,7 +225,7 @@
     "\",\"error_message\":\"" . [$UrlEncode $ErrorMessage] . \
     "\",\"command_output\":\"" . [$UrlEncode $CommandOutput] . "\"}");
   
-  :onerror RequestErr {
+  :onerror RequestErr in={
     :local CheckCert [$CertificateAvailable "ISRG Root X1"];
     :local Data;
     :if ($CheckCert = false) do={
@@ -284,7 +284,7 @@
   
   :set RequestBody ($RequestBody . "}");
   
-  :onerror HandshakeErr {
+  :onerror HandshakeErr in={
     :local CheckCert [$CertificateAvailable "ISRG Root X1"];
     :local Data;
     :if ($CheckCert = false) do={
@@ -328,7 +328,7 @@
   :local CloudIP "";
   :local CloudDDNS "";
   
-  :onerror CloudErr {
+  :onerror CloudErr in={
     :local CloudInfo [/ip cloud get];
     :set CloudIP ($CloudInfo->"public-address");
     :set CloudDDNS ($CloudInfo->"ddns-name");

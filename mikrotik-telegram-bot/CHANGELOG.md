@@ -174,6 +174,20 @@ This release includes everything needed for enterprise-grade MikroTik router man
 - **150+ Q&As**: Comprehensive FAQ
 - **3 Automation Tools**: Deployment, verification, troubleshooting
 
+## [2.4.1] - 2025-12-21
+
+### Fixed
+- **claude-relay.rsc**: Fixed `:onerror` syntax - added missing `in=` keyword to all error handling blocks (RouterOS 7.x syntax requirement)
+  - `ClaudeRelayAvailable` function
+  - `GetClaudeResponse` function
+  - `GetErrorSuggestions` function
+  - `ClaudeRelayHandshake` function
+  - `GetCloudURL` function
+
+*Fixed with love & frustration by P̷h̷e̷n̷i̷x̷*
+
+---
+
 ## [2.4.0] - 2025-01-20
 
 ### Added
@@ -261,6 +275,7 @@ We welcome contributions! Please see our contributing guidelines for:
 
 ---
 
+[2.4.1]: https://github.com/Danz17/Agents-smart-tools/releases/tag/v2.4.1
 [2.4.0]: https://github.com/Danz17/Agents-smart-tools/releases/tag/v2.4.0
 [2.0.0]: https://github.com/Danz17/Agents-smart-tools/releases/tag/v2.0.0
 [1.0.0]: https://github.com/Danz17/Agents-smart-tools/releases/tag/v1.0.0
