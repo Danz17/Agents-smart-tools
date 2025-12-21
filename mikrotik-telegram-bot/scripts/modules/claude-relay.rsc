@@ -54,6 +54,16 @@
   :set ClaudeRelayMode "anthropic";
 }
 
+:global ClaudeRelayAutoExecute;
+:if ([:typeof $ClaudeRelayAutoExecute] != "bool") do={
+  :set ClaudeRelayAutoExecute false;
+}
+
+:global ClaudeRelayErrorSuggestions;
+:if ([:typeof $ClaudeRelayErrorSuggestions] != "bool") do={
+  :set ClaudeRelayErrorSuggestions false;
+}
+
 # ============================================================================
 # CHECK SERVICE AVAILABILITY
 # ============================================================================
@@ -164,6 +174,64 @@
     :local ErrorMsg ($Response->"error");
     :log warning ("claude-relay - Failed: " . $ErrorMsg);
     :return ({success=false; error=$ErrorMsg; original_command=$Command});
+  }
+}
+
+# ============================================================================
+# GET ERROR SUGGESTIONS
+# ============================================================================
+
+:global GetErrorSuggestions do={
+  :local OriginalCommand [ :tostr $1 ];
+  :local ErrorMessage [ :tostr $2 ];
+  :local CommandOutput [ :tostr $3 ];
+  :global ClaudeRelayEnabled;
+  :global ClaudeRelayErrorSuggestions;
+  :global ClaudeRelayURL;
+  :global ClaudeRelayTimeout;
+  :global CertificateAvailable;
+  :global UrlEncode;
+  
+  # Check if error suggestions are enabled
+  :if ($ClaudeRelayEnabled != true || $ClaudeRelayErrorSuggestions != true) do={
+    :return ({success=false; error="Error suggestions not enabled"});
+  }
+  
+  # Check if service is available
+  :if ([$ClaudeRelayAvailable] = false) do={
+    :return ({success=false; error="Claude relay service not available"});
+  }
+  
+  :local SuggestURL ($ClaudeRelayURL . "/suggest-error-fix");
+  :local TimeoutNum [:totime $ClaudeRelayTimeout];
+  
+  # Build JSON request body
+  :local RequestBody ("{\"original_command\":\"" . [$UrlEncode $OriginalCommand] . \
+    "\",\"error_message\":\"" . [$UrlEncode $ErrorMessage] . \
+    "\",\"command_output\":\"" . [$UrlEncode $CommandOutput] . "\"}");
+  
+  :onerror RequestErr {
+    :local CheckCert [$CertificateAvailable "ISRG Root X1"];
+    :local Data;
+    :if ($CheckCert = false) do={
+      :set Data ([ /tool/fetch check-certificate=no output=user http-method=post timeout=$TimeoutNum \
+        http-header-field="Content-Type: application/json" \
+        http-data=$RequestBody \
+        $SuggestURL as-value ]->"data");
+    } else={
+      :set Data ([ /tool/fetch check-certificate=yes-without-crl output=user http-method=post timeout=$TimeoutNum \
+        http-header-field="Content-Type: application/json" \
+        http-data=$RequestBody \
+        $SuggestURL as-value ]->"data");
+    }
+    
+    :if ([:len $Data] > 0) do={
+      :local Response [ :deserialize from=json $Data ];
+      :return $Response;
+    }
+    :return ({success=false; error="Empty response from Claude relay"});
+  } do={
+    :return ({success=false; error=$RequestErr});
   }
 }
 

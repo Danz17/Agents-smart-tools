@@ -291,6 +291,13 @@
 # Claude API mode: "anthropic" (Anthropic API) or "local" (local Claude instance)
 :global ClaudeRelayMode "anthropic"
 
+# Auto-execute smart commands (when enabled, translated commands are automatically executed)
+# If false, user must manually send the translated RouterOS command
+:global ClaudeRelayAutoExecute false
+
+# Enable error suggestions (when enabled, Claude analyzes command errors and suggests fixes)
+:global ClaudeRelayErrorSuggestions false
+
 # ============================================================================
 # COMMAND EXECUTION SETTINGS
 # ============================================================================

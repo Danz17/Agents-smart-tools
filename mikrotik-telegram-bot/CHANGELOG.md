@@ -174,6 +174,37 @@ This release includes everything needed for enterprise-grade MikroTik router man
 - **150+ Q&As**: Comprehensive FAQ
 - **3 Automation Tools**: Deployment, verification, troubleshooting
 
+## [2.4.0] - 2025-01-20
+
+### Added
+- **Claude Code Relay Node** - Smart command processing using Claude AI
+  - Natural language command translation to RouterOS commands
+  - High-level abstractions (e.g., "block device X")
+  - Multi-threaded Python service for concurrent processing
+  - RouterOS knowledge base with syntax patterns and examples
+  - Automatic fallback to direct command execution
+  - Configurable Anthropic API or local Claude instance
+  - **Auto-execute mode** - Automatically execute translated commands (`ClaudeRelayAutoExecute`)
+  - **Error suggestions** - Claude analyzes command errors and suggests fixes (`ClaudeRelayErrorSuggestions`)
+  - New RouterOS module: `scripts/modules/claude-relay.rsc`
+  - Python service: `claude-relay-node.py` with Flask API
+  - Knowledge base: `claude-relay-knowledge.json`
+  - Configuration template: `claude-relay-config.example.json`
+  - Setup documentation: `setup/claude-relay-setup.md`
+  - See [setup/claude-relay-setup.md](setup/claude-relay-setup.md) for setup
+
+### Changed
+- Enhanced `bot-core.rsc` to integrate Claude relay for smart command processing
+- Updated `bot-config.rsc` with Claude relay configuration options
+- Help command now shows smart commands section when enabled
+
+### Improved
+- Better error handling with AI-powered suggestions
+- Seamless integration of natural language commands with existing bot functionality
+- Enhanced user experience with auto-execute mode
+
+---
+
 ## [Unreleased]
 
 ### Planned Features (Roadmap)
@@ -213,5 +244,7 @@ We welcome contributions! Please see our contributing guidelines for:
 
 ---
 
+[2.4.0]: https://github.com/Danz17/Agents-smart-tools/releases/tag/v2.4.0
+[2.0.0]: https://github.com/Danz17/Agents-smart-tools/releases/tag/v2.0.0
 [1.0.0]: https://github.com/Danz17/Agents-smart-tools/releases/tag/v1.0.0
 

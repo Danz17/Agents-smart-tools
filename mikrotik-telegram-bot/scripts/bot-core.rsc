@@ -140,6 +140,43 @@
   :global GetUserNotificationStyle;
   :global ProcessSmartCommand;
   :global ClaudeRelayAvailable;
+  :global GetErrorSuggestions;
+  :global SendTelegramWithKeyboard;
+  :global CreateInlineKeyboard;
+  :global CreateCommandButtons;
+  :global EditTelegramMessage;
+  :global SendOrUpdateMessage;
+  
+  # ============================================================================
+  # HELPER: SEND BOT REPLY WITH BUTTONS
+  # ============================================================================
+  
+  :global SendBotReplyWithButtons do={
+    :local ChatId [ :tostr $1 ];
+    :local MessageText [ :tostr $2 ];
+    :local Buttons $3;  # Array of button rows
+    :local ThreadId [ :tostr $4 ];
+    :local ReplyTo [ :tostr $5 ];
+    
+    :global SendTelegramWithKeyboard;
+    :global CreateInlineKeyboard;
+    
+    :if ([:typeof $SendTelegramWithKeyboard] != "array") do={
+      :global SendTelegram2;
+      $SendTelegram2 ({ chatid=$ChatId; subject=""; message=$MessageText; replyto=$ReplyTo; threadid=$ThreadId; silent=true });
+      :return "";
+    }
+    
+    :local KeyboardJson "";
+    :if ([:typeof $Buttons] = "array" && [:len $Buttons] > 0) do={
+      :if ([:typeof $CreateInlineKeyboard] = "array") do={
+        :set KeyboardJson [$CreateInlineKeyboard $Buttons];
+      }
+    }
+    
+    :local Result [$SendTelegramWithKeyboard $ChatId $MessageText $KeyboardJson $ThreadId];
+    :return $Result;
+  }
 
   # ============================================================================
   # VALIDATE CONFIGURATION
@@ -271,37 +308,61 @@
     :set UpdateID ($Update->"update_id");
     :log debug ($ScriptName . " - Processing update " . $UpdateID);
 
-    # Handle callback queries (inline keyboard button presses)
-    :local CallbackQuery ($Update->"callback_query");
-    :if ([:typeof $CallbackQuery] = "array") do={
-      :local CallbackData ($CallbackQuery->"data");
-      :local CallbackChat ($CallbackQuery->"message"->"chat");
-      :local CallbackMsgId ($CallbackQuery->"message"->"message_id");
-      :local CallbackFrom ($CallbackQuery->"from");
-      :local CallbackId ($CallbackQuery->"id");
-      :local ThreadId "";
-      :if (($CallbackQuery->"message"->"is_topic_message") = true) do={
-        :set ThreadId ($CallbackQuery->"message"->"message_thread_id");
-      }
-      
-      :local CallbackChatId [:tostr ($CallbackChat->"id")];
-      :local CallbackFromId [:tostr ($CallbackFrom->"id")];
-      
-      # Check if user is trusted
-      :local Trusted false;
-      :if ([:typeof $IsUserTrusted] = "array") do={
-        :set Trusted [$IsUserTrusted $CallbackFromId $CallbackChatId];
-      } else={
-        :if ($CallbackFromId = $TelegramChatId || $CallbackChatId = $TelegramChatId) do={
-          :set Trusted true;
+      # Handle callback queries (inline keyboard button presses)
+      :local CallbackQuery ($Update->"callback_query");
+      :if ([:typeof $CallbackQuery] = "array") do={
+        :local CallbackData ($CallbackQuery->"data");
+        :local CallbackChat ($CallbackQuery->"message"->"chat");
+        :local CallbackMsgId ($CallbackQuery->"message"->"message_id");
+        :local CallbackFrom ($CallbackQuery->"from");
+        :local CallbackId ($CallbackQuery->"id");
+        :local ThreadId "";
+        :if (($CallbackQuery->"message"->"is_topic_message") = true) do={
+          :set ThreadId ($CallbackQuery->"message"->"message_thread_id");
+        }
+        
+        :local CallbackChatId [:tostr ($CallbackChat->"id")];
+        :local CallbackFromId [:tostr ($CallbackFrom->"id")];
+        
+        # Check if user is trusted
+        :local Trusted false;
+        :if ([:typeof $IsUserTrusted] = "array") do={
+          :set Trusted [$IsUserTrusted $CallbackFromId $CallbackChatId];
+        } else={
+          :if ($CallbackFromId = $TelegramChatId || $CallbackChatId = $TelegramChatId) do={
+            :set Trusted true;
+          }
+        }
+        
+        :if ($Trusted = true) do={
+          # Handle command callbacks (cmd:command)
+          :if ($CallbackData ~ "^cmd:") do={
+            :local CmdToExecute [:pick $CallbackData 4 [:len $CallbackData]];
+            :log info ($ScriptName . " - Command button pressed: " . $CmdToExecute);
+            # Answer callback query
+            :global AnswerCallbackQuery;
+            :if ([:typeof $AnswerCallbackQuery] = "array") do={
+              [$AnswerCallbackQuery [:tostr $CallbackId] "" false];
+            }
+            # Process as if user sent the command - create a fake message update
+            :set Command $CmdToExecute;
+            :set Message ($CallbackQuery->"message");
+            :set Chat ($Message->"chat");
+            :set From ($CallbackQuery->"from");
+            :set IsMyReply true;
+            :set IsAnyReply false;
+            # Don't continue - process the command below
+          } else={
+            # Handle other callbacks via interactive menu
+            :if ([:typeof $HandleCallbackQuery] = "array") do={
+              [$HandleCallbackQuery $CallbackData $CallbackChatId [:tostr $CallbackMsgId] $ThreadId [:tostr $CallbackId]];
+            }
+            :continue;
+          }
+        } else={
+          :continue;
         }
       }
-      
-      :if ($Trusted = true && [:typeof $HandleCallbackQuery] = "array") do={
-        [$HandleCallbackQuery $CallbackData $CallbackChatId [:tostr $CallbackMsgId] $ThreadId [:tostr $CallbackId]];
-      }
-      :continue;
-    }
 
     :local Message ($Update->"message");
     :if ([:typeof $Message] != "array") do={
@@ -361,10 +422,11 @@
           :log info ($ScriptName . " - Status query from update " . $UpdateID);
           :local ActiveStatus "passive";
           :if ($TelegramChatActive = true) do={ :set ActiveStatus "active"; }
-          $SendTelegram2 ({ chatid=($Chat->"id"); silent=true; \
-            replyto=($Message->"message_id"); threadid=$ThreadId; \
-            subject="⚡ TxMTC"; \
-            message=("Hey " . ($From->"first_name") . "! Online & " . $ActiveStatus . " | /help") });
+          :local StatusMsg ("Hey " . ($From->"first_name") . "\\! Online \\& " . $ActiveStatus . " | /help");
+          :local CommonCmds ({{"/status"; "/interfaces"; "/dhcp"; "/logs"}});
+          :local CommonButtons [$CreateCommandButtons $CommonCmds];
+          :local KeyboardJson [$CreateInlineKeyboard $CommonButtons];
+          [$SendTelegramWithKeyboard [:tostr ($Chat->"id")] $StatusMsg $KeyboardJson $ThreadId];
           :set Done true;
         }
         
@@ -392,7 +454,8 @@
             "💾 *Manage:*\n" . \
             "`/backup` `/update`\n\n" . \
             "⚙️ *Execute:*\n" . \
-            "Activate & send any RouterOS command\n\n" . \
+            "Activate & send any RouterOS command\n" . \
+            ([:typeof $ClaudeRelayEnabled] = "bool" && $ClaudeRelayEnabled = true ? "🤖 *Smart Commands:*\nNatural language (e.g., \"show interfaces\")\n\n" : "") . \
             "🛡️ *Security:*\n" . \
             "Rate: " . $CommandRateLimit . "/min | `CONFIRM code`\n\n" . \
             "🎮 *Interactive:*\n" . \
@@ -403,9 +466,9 @@
             "`/cleanup` - Clean old messages\n\n" . \
             "─── by P̷h̷e̷n̷i̷x̷");
 
-          $SendTelegram2 ({ chatid=($Chat->"id"); silent=true; \
-            replyto=($Message->"message_id"); threadid=$ThreadId; \
-            subject="⚡ TxMTC | Help"; message=$HelpText });
+          :local HelpCmds ({{"/status"; "/interfaces"; "/dhcp"; "/logs"; "/menu"; "/modules"}});
+          :local HelpButtons [$CreateCommandButtons $HelpCmds];
+          [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $HelpText $HelpButtons $ThreadId [:tostr ($Message->"message_id")]];
           :set Done true;
         }
         
@@ -464,9 +527,9 @@
             } else={
               :set ScriptList ($ScriptList . "No scripts in this category.");
             }
-            $SendTelegram2 ({ chatid=($Chat->"id"); silent=true; \
-              replyto=($Message->"message_id"); threadid=$ThreadId; \
-              subject="⚡ TxMTC | Scripts"; message=$ScriptList });
+            :local ScriptCmds ({{"/menu"; "/modules"; "/help"}});
+            :local ScriptButtons [$CreateCommandButtons $ScriptCmds];
+            [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $ScriptList $ScriptButtons $ThreadId [:tostr ($Message->"message_id")]];
           } else={
             :local Categories [$GetCategories];
             :local CatList ("*Available Categories:*\n\n");
@@ -474,9 +537,9 @@
               :set CatList ($CatList . "• " . [$Capitalize $Cat] . "\n");
             }
             :set CatList ($CatList . "\nUse `/scripts <category>` to list scripts.");
-            $SendTelegram2 ({ chatid=($Chat->"id"); silent=true; \
-              replyto=($Message->"message_id"); threadid=$ThreadId; \
-              subject="⚡ TxMTC | Scripts"; message=$CatList });
+            :local CatCmds ({{"/menu"; "/modules"; "/help"}});
+            :local CatButtons [$CreateCommandButtons $CatCmds];
+            [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $CatList $CatButtons $ThreadId [:tostr ($Message->"message_id")]];
           }
           :set Done true;
         }
@@ -513,15 +576,15 @@
           :if ([:len $ScriptId] > 0 && [:typeof $InstallScriptFromRegistry] = "array") do={
             :local Result [$InstallScriptFromRegistry $ScriptId];
             :if (($Result->"success") = true) do={
-              $SendTelegram2 ({ chatid=($Chat->"id"); silent=false; \
-                replyto=($Message->"message_id"); threadid=$ThreadId; \
-                subject="⚡ TxMTC | Install"; \
-                message=("✅ " . ($Result->"message")) });
-            } else={
-              $SendTelegram2 ({ chatid=($Chat->"id"); silent=false; \
-                replyto=($Message->"message_id"); threadid=$ThreadId; \
-                subject="⚡ TxMTC | Install"; \
-                message=("❌ Installation failed: " . ($Result->"error")) });
+            :local InstallMsg ("✅ " . ($Result->"message"));
+            :local InstallCmds ({{"/modules"; "/scripts"; "/menu"}});
+            :local InstallButtons [$CreateCommandButtons $InstallCmds];
+            [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $InstallMsg $InstallButtons $ThreadId [:tostr ($Message->"message_id")]];
+          } else={
+            :local ErrorMsg ("❌ Installation failed: " . ($Result->"error"));
+            :local ErrorCmds ({{"/modules"; "/scripts"; "/help"}});
+            :local ErrorButtons [$CreateCommandButtons $ErrorCmds];
+            [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $ErrorMsg $ErrorButtons $ThreadId [:tostr ($Message->"message_id")]];
             }
             :set Done true;
           }
@@ -531,14 +594,12 @@
         :if ($Done = false && $Command = "/settings") do={
           :if ([:typeof $FormatUserSettings] = "array") do={
             :local SettingsText [$FormatUserSettings [:tostr ($Chat->"id")]];
-            $SendTelegram2 ({ chatid=($Chat->"id"); silent=true; \
-              replyto=($Message->"message_id"); threadid=$ThreadId; \
-              subject="⚡ TxMTC | Settings"; message=$SettingsText });
+            :local SettingsCmds ({{"/menu"; "/help"; "/cleanup"}});
+            :local SettingsButtons [$CreateCommandButtons $SettingsCmds];
+            [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $SettingsText $SettingsButtons $ThreadId [:tostr ($Message->"message_id")]];
           } else={
-            $SendTelegram2 ({ chatid=($Chat->"id"); silent=true; \
-              replyto=($Message->"message_id"); threadid=$ThreadId; \
-              subject="⚡ TxMTC | Settings"; \
-              message="Settings module not loaded." });
+            :local ErrorMsg "Settings module not loaded\\.";
+            [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $ErrorMsg ({}) $ThreadId [:tostr ($Message->"message_id")]];
           }
           :set Done true;
         }
@@ -555,15 +616,13 @@
           }
           :if ([:typeof $CleanupOldMessages] = "array") do={
             :local Deleted [$CleanupOldMessages [:tostr ($Chat->"id")] $MessageRetentionPeriod $KeepCriticalMessages];
-            $SendTelegram2 ({ chatid=($Chat->"id"); silent=true; \
-              replyto=($Message->"message_id"); threadid=$ThreadId; \
-              subject="⚡ TxMTC | Cleanup"; \
-              message=("🧹 Cleaned up " . $Deleted . " old message(s)") });
+            :local CleanupMsg ("🧹 Cleaned up " . $Deleted . " old message\\(s\\)");
+            :local CleanupCmds ({{"/menu"; "/help"; "/settings"}});
+            :local CleanupButtons [$CreateCommandButtons $CleanupCmds];
+            [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $CleanupMsg $CleanupButtons $ThreadId [:tostr ($Message->"message_id")]];
           } else={
-            $SendTelegram2 ({ chatid=($Chat->"id"); silent=true; \
-              replyto=($Message->"message_id"); threadid=$ThreadId; \
-              subject="⚡ TxMTC | Cleanup"; \
-              message="Message cleanup not available." });
+            :local ErrorMsg "Message cleanup not available\\.";
+            [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $ErrorMsg ({}) $ThreadId [:tostr ($Message->"message_id")]];
           }
           :set Done true;
         }
@@ -605,16 +664,27 @@
           :if ($Done = false) do={
             # Process smart commands via Claude relay (if enabled and command looks like natural language)
             :global ClaudeRelayEnabled;
+            :global ClaudeRelayAutoExecute;
             :local IsSmartCommand false;
+            :local OriginalSmartCommand "";
             :if ([:typeof $ClaudeRelayEnabled] = "bool" && $ClaudeRelayEnabled = true) do={
               # Detect smart commands: not starting with "/" or contains natural language patterns
               :if ([:pick $Command 0 1] != "/" || $Command ~ "^(show|block|unblock|what|how|list|get|find|check)") do={
                 :if ([:typeof $ProcessSmartCommand] = "array") do={
+                  :set OriginalSmartCommand $Command;
                   :local SmartResult [$ProcessSmartCommand $Command];
                   :if (($SmartResult->"success") = true) do={
                     :set Command ($SmartResult->"routeros_command");
                     :set IsSmartCommand true;
-                    :log info ($ScriptName . " - Smart command processed: \"" . ($SmartResult->"original_command") . "\" -> \"" . $Command . "\"");
+                    :log info ($ScriptName . " - Smart command processed: \"" . $OriginalSmartCommand . "\" -> \"" . $Command . "\"");
+                    
+                    # If auto-execute is enabled, show the translation and proceed
+                    :if ([:typeof $ClaudeRelayAutoExecute] = "bool" && $ClaudeRelayAutoExecute = true) do={
+                      $SendTelegram2 ({ chatid=($Chat->"id"); silent=true; \
+                        replyto=($Message->"message_id"); threadid=$ThreadId; \
+                        subject="⚡ TxMTC | Smart Command"; \
+                        message=("🤖 Translated:\n`" . $OriginalSmartCommand . "`\n\n→ `" . $Command . "`\n\nExecuting...") });
+                    }
                   } else={
                     # Smart command processing failed, fall back to direct execution
                     :local ErrorMsg ($SmartResult->"error");
@@ -634,22 +704,32 @@
               :set Command [$ProcessCustomCommand $Command];
             }
             
+            # Store command message ID for result editing
+            :global TelegramMessageHistory;
+            :global LoadBotState;
+            :if ([:typeof $TelegramMessageHistory] != "array") do={
+              :local LoadedHistory [$LoadBotState "message-history"];
+              :if ([:typeof $LoadedHistory] = "array") do={
+                :set TelegramMessageHistory $LoadedHistory;
+              } else={
+                :set TelegramMessageHistory ({});
+              }
+            }
+            :local CommandMsgKey ("cmd_" . [:tostr ($Message->"message_id")]);
+            :set ($TelegramMessageHistory->$CommandMsgKey) [:tostr ($Message->"message_id")];
+            
             # Check dangerous commands blocklist
             :if ([:typeof $IsDangerousCommand] = "array" && [$IsDangerousCommand $Command] = true) do={
-              $SendTelegram2 ({ chatid=($Chat->"id"); silent=false; \
-                replyto=($Message->"message_id"); threadid=$ThreadId; \
-                subject="⚡ TxMTC | Blocked"; \
-                message=("This command is blocked for security reasons.\n\nCommand: " . $Command) });
+              :local BlockedMsg ("This command is blocked for security reasons\\.\n\nCommand: `" . $Command . "`");
+              [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $BlockedMsg ({}) $ThreadId [:tostr ($Message->"message_id")]];
               :log warning ($ScriptName . " - Blocked command: " . $Command);
               :set Done true;
             }
             
             # Check whitelist
             :if ($Done = false && [:typeof $CheckWhitelist] = "array" && [$CheckWhitelist $Command] = false) do={
-              $SendTelegram2 ({ chatid=($Chat->"id"); silent=false; \
-                replyto=($Message->"message_id"); threadid=$ThreadId; \
-                subject="⚡ TxMTC | Not Allowed"; \
-                message=("This command is not in the whitelist.\n\nCommand: " . $Command) });
+              :local NotAllowedMsg ("This command is not in the whitelist\\.\n\nCommand: `" . $Command . "`");
+              [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $NotAllowedMsg ({}) $ThreadId [:tostr ($Message->"message_id")]];
               :log warning ($ScriptName . " - Non-whitelisted command: " . $Command);
               :set Done true;
             }
@@ -661,13 +741,12 @@
             :if ([:typeof $StorePendingConfirmation] = "array") do={
               :set ConfirmCode [$StorePendingConfirmation $FromId $Command ($Message->"message_id")];
             }
-            $SendTelegram2 ({ chatid=($Chat->"id"); silent=false; \
-              replyto=($Message->"message_id"); threadid=$ThreadId; \
-              subject="⚡ TxMTC | Confirm?"; \
-              message=("This command requires confirmation:\n\n" . \
-                "Command: `" . $Command . "`\n\n" . \
-                "To confirm, send:\n`CONFIRM " . $ConfirmCode . "`\n\n" . \
-                "This code expires in 5 minutes.") });
+            :local ConfirmMsg ("This command requires confirmation:\n\n" . \
+              "Command: `" . $Command . "`\n\n" . \
+              "To confirm, send:\n`CONFIRM " . $ConfirmCode . "`\n\n" . \
+              "This code expires in 5 minutes.");
+            :local ConfirmButtons ({({text="✅ Confirm"; callback_data=("confirm:" . $ConfirmCode)})});
+            [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $ConfirmMsg $ConfirmButtons $ThreadId [:tostr ($Message->"message_id")]];
             :log info ($ScriptName . " - Confirmation requested for: " . $Command);
             :set Done true;
           }
@@ -708,8 +787,10 @@
                 }
               }
               
+              :local CommandFailed false;
               :if ([:len [/file find name=($TmpFile . ".failed")]] > 0) do={
                 :set State "❌ Command failed with an error!\n\n";
+                :set CommandFailed true;
               }
               
               :local Content "";
@@ -724,10 +805,63 @@
                 :set OutputText "📝 No output.";
               }
               
-              $SendTelegram2 ({ chatid=($Chat->"id"); silent=true; \
-                replyto=($Message->"message_id"); threadid=$ThreadId; \
-                subject="⚡ TxMTC | Result"; \
-                message=("⚙️ Command:\n" . $Command . "\n\n" . $State . $OutputText) });
+              # If command failed and error suggestions are enabled, get suggestions
+              :local ErrorSuggestions "";
+              :if ($CommandFailed = true && [:typeof $GetErrorSuggestions] = "array") do={
+                :global ClaudeRelayErrorSuggestions;
+                :if ([:typeof $ClaudeRelayErrorSuggestions] = "bool" && $ClaudeRelayErrorSuggestions = true) do={
+                  :local SuggestionResult [$GetErrorSuggestions $Command $State $Content];
+                  :if (($SuggestionResult->"success") = true) do={
+                    :set ErrorSuggestions ($SuggestionResult->"suggestion");
+                    :set OutputText ($OutputText . "\n\n💡 *Suggestion:*\n" . $ErrorSuggestions);
+                  }
+                }
+              }
+              
+              # Build result message
+              :local ResultMsg ("⚙️ Command:\n`" . $Command . "`\n\n" . $State . $OutputText);
+              
+              # Track command message ID for editing
+              :global TelegramMessageHistory;
+              :global LoadBotState;
+              :global SaveBotState;
+              :if ([:typeof $TelegramMessageHistory] != "array") do={
+                :local LoadedHistory [$LoadBotState "message-history"];
+                :if ([:typeof $LoadedHistory] = "array") do={
+                  :set TelegramMessageHistory $LoadedHistory;
+                } else={
+                  :set TelegramMessageHistory ({});
+                }
+              }
+              
+              :local CommandMsgKey ("cmd_" . [:tostr ($Message->"message_id")]);
+              :local ExistingCmdMsgId ($TelegramMessageHistory->$CommandMsgKey);
+              
+              # For short outputs (< 1000 chars), edit original message
+              :if ([:len $ResultMsg] < 1000 && [:len $ExistingCmdMsgId] > 0 && $ExistingCmdMsgId != "0") do={
+                :local EditResult [$EditTelegramMessage [:tostr ($Chat->"id")] $ExistingCmdMsgId $ResultMsg ""];
+                :if ($EditResult = true) do={
+                  :log debug ($ScriptName . " - Edited command result message");
+                } else={
+                  # Message deleted, send new
+                  :local NewMsgId [$SendTelegram2 ({ chatid=($Chat->"id"); silent=true; \
+                    replyto=($Message->"message_id"); threadid=$ThreadId; \
+                    subject="⚡ TxMTC | Result"; message=$ResultMsg })];
+                  :if ([:len $NewMsgId] > 0) do={
+                    :set ($TelegramMessageHistory->$CommandMsgKey) $NewMsgId;
+                    [$SaveBotState "message-history" $TelegramMessageHistory];
+                  }
+                }
+              } else={
+                # Send new message for long outputs or first time
+                :local NewMsgId [$SendTelegram2 ({ chatid=($Chat->"id"); silent=true; \
+                  replyto=($Message->"message_id"); threadid=$ThreadId; \
+                  subject="⚡ TxMTC | Result"; message=$ResultMsg })];
+                :if ([:len $NewMsgId] > 0) do={
+                  :set ($TelegramMessageHistory->$CommandMsgKey) $NewMsgId;
+                  [$SaveBotState "message-history" $TelegramMessageHistory];
+                }
+              }
               
               # Cleanup temp files
               :if ([:len [/file find name=$TmpFile]] > 0) do={ /file remove $TmpFile; }

@@ -27,6 +27,7 @@
 
 ### Remote Control
 - Execute RouterOS commands via Telegram
+- **Smart Command Processing** - Natural language commands via Claude AI
 - Syntax validation before execution
 - Real-time output delivery
 - Multi-device support with group activation
@@ -50,6 +51,15 @@
 - Command confirmation flow
 - User blocking after failed attempts
 - Audit logging
+
+### Smart Commands (Claude Code Relay Node) ⭐ NEW
+- Natural language command processing
+- High-level abstractions (e.g., "block device X")
+- Context-aware RouterOS command generation
+- Multi-threaded request handling
+- Automatic fallback to direct commands
+- **Auto-execute mode** - Automatically execute translated commands
+- **Error suggestions** - Get AI-powered suggestions when commands fail
 
 ---
 
@@ -94,12 +104,25 @@ Send `?` to your bot in Telegram!
 | `! RouterName` | Activate device |
 | `! @all` | Activate all |
 
+### Smart Commands (Claude Relay)
+When Claude Code Relay Node is enabled, you can use natural language:
+- `show me all interfaces with errors`
+- `block device 192.168.1.100`
+- `show dhcp leases`
+- `what's using the most bandwidth?`
+
+See [setup/claude-relay-setup.md](setup/claude-relay-setup.md) for configuration.
+
 ---
 
 ## Project Structure
 
 ```
 mikrotik-telegram-bot/
+├── claude-relay-node.py         # Claude Code Relay Node (Python service)
+├── claude-relay-knowledge.json  # RouterOS knowledge base
+├── claude-relay-config.example.json  # Configuration template
+├── requirements.txt             # Python dependencies
 ├── scripts/
 │   ├── bot-config.rsc           # Configuration
 │   ├── bot-core.rsc             # Main bot logic
@@ -115,11 +138,13 @@ mikrotik-telegram-bot/
 │       ├── backup.rsc           # Backup management
 │       ├── wireless-monitoring.rsc
 │       ├── daily-summary.rsc
-│       └── custom-commands.rsc
+│       ├── custom-commands.rsc
+│       └── claude-relay.rsc     # Claude relay integration
 ├── setup/
 │   ├── installation.md
 │   ├── telegram-setup.md
-│   └── security-hardening.md
+│   ├── security-hardening.md
+│   └── claude-relay-setup.md    # Claude relay setup guide
 ├── README.md
 ├── QUICKSTART.md
 ├── FAQ.md

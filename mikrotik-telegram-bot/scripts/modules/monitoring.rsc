@@ -67,7 +67,9 @@
   :global SaveBotState;
   :global LoadBotState;
   :global EditTelegramMessage;
+  :global GetOrCreateMonitoringMessage;
   :global CertificateAvailable;
+  :global TelegramChatId;
 
   # ============================================================================
   # LOAD PERSISTED MONITORING STATE
@@ -158,21 +160,11 @@
   :set CheckHealthCPUUtilization (($CheckHealthCPUUtilization * 4 + $CurrentCPU) / 5);
   
   :if ($CheckHealthCPUUtilization > ($MonitorCPUThreshold * 10) && $CheckHealthCPUUtilizationNotified != true) do={
-    :local CpuPercent [$FormatPercent $CheckHealthCPUUtilization];
-    :local ThresholdPercent [$FormatPercent ($MonitorCPUThreshold * 10)];
-    :local CurrentPercent [$FormatPercent (($Resource->"cpu-load") * 10)];
-    :local CpuMsg [$FormatMessage "CPU Utilization High" \
-      ("Current: " . $CurrentPercent . "\nAverage: " . $CpuPercent . "\nThreshold: " . $ThresholdPercent . "\n\n⚠️ System may be under heavy load.") "⚠️"];
-    $SendTelegram2 ({ silent=false; subject=""; message=$CpuMsg });
     :set CheckHealthCPUUtilizationNotified true;
     :log warning ($ScriptName . " - CPU utilization high: " . ($CheckHealthCPUUtilization / 10) . "%");
   }
   
   :if ($CheckHealthCPUUtilization < (($MonitorCPUThreshold - 10) * 10) && $CheckHealthCPUUtilizationNotified = true) do={
-    :local CpuPercent [$FormatPercent $CheckHealthCPUUtilization];
-    :local CpuMsg [$FormatMessage "CPU Utilization Normal" \
-      ("Current: " . $CpuPercent . "\n\n✅ System load returned to normal.") "✅"];
-    $SendTelegram2 ({ silent=true; subject=""; message=$CpuMsg });
     :set CheckHealthCPUUtilizationNotified false;
     :log info ($ScriptName . " - CPU utilization normal: " . ($CheckHealthCPUUtilization / 10) . "%");
   }
@@ -187,22 +179,11 @@
   :local RAMPercent ($UsedRAM * 100 / $TotalRAM);
   
   :if ($RAMPercent >= $MonitorRAMThreshold && $CheckHealthRAMUtilizationNotified != true) do={
-    :local RamPercent [$FormatPercent ($RAMPercent * 10)];
-    :local ThresholdPercent [$FormatPercent ($MonitorRAMThreshold * 10)];
-    :local TotalRam [$FormatBytes $TotalRAM];
-    :local FreeRam [$FormatBytes $FreeRAM];
-    :local RamMsg [$FormatMessage "RAM Utilization High" \
-      ("Used: " . $RamPercent . "\nThreshold: " . $ThresholdPercent . "\n\nTotal: " . $TotalRam . "\nFree: " . $FreeRam . "\n\n⚠️ Consider freeing up memory.") "⚠️"];
-    $SendTelegram2 ({ silent=false; subject=""; message=$RamMsg });
     :set CheckHealthRAMUtilizationNotified true;
     :log warning ($ScriptName . " - RAM utilization high: " . $RAMPercent . "%");
   }
   
   :if ($RAMPercent < ($MonitorRAMThreshold - 10) && $CheckHealthRAMUtilizationNotified = true) do={
-    :local RamPercent [$FormatPercent ($RAMPercent * 10)];
-    :local RamMsg [$FormatMessage "RAM Utilization Normal" \
-      ("Used: " . $RamPercent . "\n\n✅ Memory usage returned to normal.") "✅"];
-    $SendTelegram2 ({ silent=true; subject=""; message=$RamMsg });
     :set CheckHealthRAMUtilizationNotified false;
     :log info ($ScriptName . " - RAM utilization normal: " . $RAMPercent . "%");
   }
@@ -217,22 +198,11 @@
   :local HDDPercent ($UsedHDD * 100 / $TotalHDD);
   
   :if ($HDDPercent >= $MonitorDiskThreshold && $CheckHealthDiskUtilizationNotified != true) do={
-    :local DiskPercent [$FormatPercent ($HDDPercent * 10)];
-    :local ThresholdPercent [$FormatPercent ($MonitorDiskThreshold * 10)];
-    :local TotalDisk [$FormatBytes $TotalHDD];
-    :local FreeDisk [$FormatBytes $FreeHDD];
-    :local DiskMsg [$FormatMessage "Disk Usage High" \
-      ("Used: " . $DiskPercent . "\nThreshold: " . $ThresholdPercent . "\n\nTotal: " . $TotalDisk . "\nFree: " . $FreeDisk . "\n\n⚠️ Consider cleaning up old files.") "⚠️"];
-    $SendTelegram2 ({ silent=false; subject=""; message=$DiskMsg });
     :set CheckHealthDiskUtilizationNotified true;
     :log warning ($ScriptName . " - Disk usage high: " . $HDDPercent . "%");
   }
   
   :if ($HDDPercent < ($MonitorDiskThreshold - 10) && $CheckHealthDiskUtilizationNotified = true) do={
-    :local DiskPercent [$FormatPercent ($HDDPercent * 10)];
-    :local DiskMsg [$FormatMessage "Disk Usage Normal" \
-      ("Used: " . $DiskPercent . "\n\n✅ Disk space returned to normal.") "✅"];
-    $SendTelegram2 ({ silent=true; subject=""; message=$DiskMsg });
     :set CheckHealthDiskUtilizationNotified false;
     :log info ($ScriptName . " - Disk usage normal: " . $HDDPercent . "%");
   }
@@ -241,14 +211,17 @@
   # TEMPERATURE MONITORING
   # ============================================================================
   
+  :local TempVal "";
+  :local TempStatus "N/A";
   :onerror TempErr {
-    :local TempVal [ /system/health/get value-name=temperature ];
-    :if ([:typeof $TempVal] = "num" && $TempVal > $MonitorTempThreshold) do={
-      $SendTelegram2 ({ silent=false; \
-        subject="🌡️ Temperature Alert"; \
-        message=("Temperature on " . $Identity . " is high!\n\n" . \
-          "Current: " . $TempVal . "°C\nThreshold: " . $MonitorTempThreshold . "°C") });
-      :log warning ($ScriptName . " - Temperature high: " . $TempVal . "°C");
+    :set TempVal [ /system/health/get value-name=temperature ];
+    :if ([:typeof $TempVal] = "num") do={
+      :if ($TempVal > $MonitorTempThreshold) do={
+        :set TempStatus ("⚠️ " . [$FormatTemperature $TempVal] . " (High)");
+        :log warning ($ScriptName . " - Temperature high: " . $TempVal . "°C");
+      } else={
+        :set TempStatus ("✅ " . [$FormatTemperature $TempVal]);
+      }
     }
   } do={ :log debug ($ScriptName . " - No temperature sensor available"); }
 
@@ -256,14 +229,17 @@
   # VOLTAGE MONITORING
   # ============================================================================
   
+  :local VoltageVal "";
+  :local VoltageStatus "N/A";
   :onerror VoltErr {
-    :local VoltageVal [ /system/health/get value-name=voltage ];
-    :if ([:typeof $VoltageVal] = "num" && ($VoltageVal < $MonitorVoltageMin || $VoltageVal > $MonitorVoltageMax)) do={
-      $SendTelegram2 ({ silent=false; \
-        subject="⚡ Voltage Alert"; \
-        message=("Voltage on " . $Identity . " is out of range!\n\n" . \
-          "Current: " . $VoltageVal . "V\nExpected: " . $MonitorVoltageMin . "-" . $MonitorVoltageMax . "V") });
-      :log warning ($ScriptName . " - Voltage out of range: " . $VoltageVal . "V");
+    :set VoltageVal [ /system/health/get value-name=voltage ];
+    :if ([:typeof $VoltageVal] = "num") do={
+      :if ($VoltageVal < $MonitorVoltageMin || $VoltageVal > $MonitorVoltageMax) do={
+        :set VoltageStatus ("⚠️ " . [$FormatVoltage $VoltageVal] . " (Out of range)");
+        :log warning ($ScriptName . " - Voltage out of range: " . $VoltageVal . "V");
+      } else={
+        :set VoltageStatus ("✅ " . [$FormatVoltage $VoltageVal]);
+      }
     }
   } do={ :log debug ($ScriptName . " - No voltage sensor available"); }
 
@@ -305,33 +281,14 @@
           # Only alert if interface is enabled but not running
           :local IsDown ($IsDisabled = false && $IsRunning = false);
 
-          # Alert if interface just went down (wasn't down before)
+          # Track interface state changes
           :if ($IsDown = true && $WasDown != true) do={
-            :local ClockTime [/system clock get time];
-            :local IfMsg [$FormatMessage "Interface Down" \
-              ("Interface: *" . $IntName . "*\nStatus: Enabled but not running\n\n⏰ " . $ClockTime) "🔌"];
-            :local MsgId [$SendTelegram2 ({ silent=false; subject=""; message=$IfMsg })];
-            # Store message ID for potential editing
-            :set ($MonitoringAlertMsgIds->("if_" . $IntName)) $MsgId;
             :log warning ($ScriptName . " - Interface down: " . $IntName);
             :set ($CheckHealthInterfaceDown->$IntName) true;
             :set StateChanged true;
           }
 
-          # Alert recovery - edit existing message or send recovery
           :if ($IsDown = false && $WasDown = true) do={
-            :local OldMsgId ($MonitoringAlertMsgIds->("if_" . $IntName));
-            :local ClockTime [/system clock get time];
-            :local RecoveryMsg [$FormatMessage "Interface Recovered" \
-              ("Interface: *" . $IntName . "*\nStatus: Running\n\n⏰ " . $ClockTime) "✅"];
-            :if ([:len $OldMsgId] > 0) do={
-              # Try to edit the old alert message
-              :local EditResult [$EditTelegramMessage $TelegramChatId $OldMsgId $RecoveryMsg ""];
-              :set ($MonitoringAlertMsgIds->("if_" . $IntName)) "";
-            } else={
-              # Send new recovery message if no old message to edit
-              $SendTelegram2 ({ silent=true; subject=""; message=$RecoveryMsg });
-            }
             :log info ($ScriptName . " - Interface recovered: " . $IntName);
             :set ($CheckHealthInterfaceDown->$IntName) false;
             :set StateChanged true;
@@ -374,6 +331,103 @@
   }
 
   # ============================================================================
+  # BUILD CONSOLIDATED MONITORING MESSAGE
+  # ============================================================================
+  
+  :local MonitoringMsg "";
+  :local ClockTime [/system clock get time];
+  
+  # Build CPU status
+  :local CpuPercent [$FormatPercent $CheckHealthCPUUtilization];
+  :local CpuStatus "";
+  :if ($CheckHealthCPUUtilization > ($MonitorCPUThreshold * 10)) do={
+    :set CpuStatus ("⚠️ " . $CpuPercent . " \\(High\\)");
+  } else={
+    :set CpuStatus ("✅ " . $CpuPercent . " \\(Normal\\)");
+  }
+  
+  # Build RAM status
+  :local RamPercent [$FormatPercent ($RAMPercent * 10)];
+  :local TotalRam [$FormatBytes $TotalRAM];
+  :local FreeRam [$FormatBytes $FreeRAM];
+  :local RamStatus "";
+  :if ($RAMPercent >= $MonitorRAMThreshold) do={
+    :set RamStatus ("⚠️ " . $RamPercent . " \\(High\\) \\- " . $TotalRam . " total, " . $FreeRam . " free");
+  } else={
+    :set RamStatus ("✅ " . $RamPercent . " \\(Normal\\) \\- " . $TotalRam . " total, " . $FreeRam . " free");
+  }
+  
+  # Build Disk status
+  :local DiskPercent [$FormatPercent ($HDDPercent * 10)];
+  :local TotalDisk [$FormatBytes $TotalHDD];
+  :local FreeDisk [$FormatBytes $FreeHDD];
+  :local DiskStatus "";
+  :if ($HDDPercent >= $MonitorDiskThreshold) do={
+    :set DiskStatus ("⚠️ " . $DiskPercent . " \\(High\\) \\- " . $TotalDisk . " total, " . $FreeDisk . " free");
+  } else={
+    :set DiskStatus ("✅ " . $DiskPercent . " \\(Normal\\) \\- " . $TotalDisk . " total, " . $FreeDisk . " free");
+  }
+  
+  # Build Interface status
+  :local InterfaceStatus "";
+  :if ([:len $MonitorInterfaces] > 0) do={
+    :local InterfaceList;
+    :if ([:typeof $ParseCSV] = "array") do={
+      :set InterfaceList [$ParseCSV $MonitorInterfaces];
+    } else={
+      :set InterfaceList ({});
+      :local Current "";
+      :for I from=0 to=([:len $MonitorInterfaces] - 1) do={
+        :local Char [:pick $MonitorInterfaces $I ($I + 1)];
+        :if ($Char = ",") do={
+          :if ([:len $Current] > 0) do={ :set ($InterfaceList->[:len $InterfaceList]) $Current; :set Current ""; }
+        } else={ :set Current ($Current . $Char); }
+      }
+      :if ([:len $Current] > 0) do={ :set ($InterfaceList->[:len $InterfaceList]) $Current; }
+    }
+    
+    :set InterfaceStatus "\n🔌 *Interfaces:*\n";
+    :foreach IntName in=$InterfaceList do={
+      :onerror IntErr {
+        :local IntFound [/interface/find where name=$IntName];
+        :if ([:len $IntFound] > 0) do={
+          :local Int [ /interface/get $IntFound ];
+          :local IsDisabled ($Int->"disabled");
+          :local IsRunning ($Int->"running");
+          :local IsDown ($IsDisabled = false && $IsRunning = false);
+          :if ($IsDown = true) do={
+            :set InterfaceStatus ($InterfaceStatus . "  • " . $IntName . ": ⚠️ Down\n");
+          } else={
+            :set InterfaceStatus ($InterfaceStatus . "  • " . $IntName . ": ✅ Running\n");
+          }
+        }
+      } do={}
+    }
+  }
+  
+  # Build complete message
+  :set MonitoringMsg ("⚡ *System Monitoring*\n\n" . \
+    "📊 *CPU:* " . $CpuStatus . "\n" . \
+    "💾 *RAM:* " . $RamStatus . "\n" . \
+    "💿 *Disk:* " . $DiskStatus . "\n" . \
+    "🌐 *Internet:* " . $InternetStatus . "\n");
+  
+  :if ([:len $TempStatus] > 0 && $TempStatus != "N/A") do={
+    :set MonitoringMsg ($MonitoringMsg . "🌡️ *Temp:* " . $TempStatus . "\n");
+  }
+  
+  :if ([:len $VoltageStatus] > 0 && $VoltageStatus != "N/A") do={
+    :set MonitoringMsg ($MonitoringMsg . "⚡ *Voltage:* " . $VoltageStatus . "\n");
+  }
+  
+  :set MonitoringMsg ($MonitoringMsg . $InterfaceStatus . "\n⏰ *Last update:* " . $ClockTime);
+  
+  # Update single monitoring message (only if monitoring is enabled)
+  :if ([:typeof $GetOrCreateMonitoringMessage] = "array" && $EnableAutoMonitoring = true) do={
+    [$GetOrCreateMonitoringMessage $TelegramChatId $MonitoringMsg];
+  }
+
+  # ============================================================================
   # INTERNET CONNECTIVITY MONITORING
   # ============================================================================
   
@@ -384,19 +438,20 @@
   } do={ :set InternetUp false; }
   
   :if ($InternetUp = false && $CheckHealthInternetConnectivity = true) do={
-    $SendTelegram2 ({ silent=false; \
-      subject="🌐 Internet Connectivity Lost"; \
-      message=("Router " . $Identity . " cannot reach the internet.\n\nCheck WAN interface and routing.") });
     :set CheckHealthInternetConnectivity false;
     :log warning ($ScriptName . " - Internet connectivity lost");
   }
   
   :if ($InternetUp = true && $CheckHealthInternetConnectivity = false) do={
-    $SendTelegram2 ({ silent=true; \
-      subject="✅ Internet Connectivity Restored"; \
-      message=("Router " . $Identity . " internet connectivity has been restored.") });
     :set CheckHealthInternetConnectivity true;
     :log info ($ScriptName . " - Internet connectivity restored");
+  }
+  
+  :local InternetStatus "";
+  :if ($CheckHealthInternetConnectivity = true) do={
+    :set InternetStatus "✅ Connected";
+  } else={
+    :set InternetStatus "⚠️ Disconnected";
   }
 
   # ============================================================================

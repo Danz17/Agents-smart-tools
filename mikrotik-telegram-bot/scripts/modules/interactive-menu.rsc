@@ -78,7 +78,7 @@
   :global CertificateAvailable;
   
   :local SendUrl ("https://api.telegram.org/bot" . $TelegramTokenId . "/sendMessage");
-  :local SendData ("chat_id=" . $ChatId .     "&text=" . [$UrlEncode $MessageText] .     "&parse_mode=Markdown" .     "&reply_markup=" . [$UrlEncode $KeyboardJSON]);
+  :local SendData ("chat_id=" . $ChatId . "&text=" . [$UrlEncode $MessageText] . "&parse_mode=MarkdownV2" . "&reply_markup=" . [$UrlEncode $KeyboardJSON]);
   
   :if ([:len $ThreadId] > 0 && $ThreadId != "0") do={
     :set SendData ($SendData . "&message_thread_id=" . $ThreadId);
@@ -95,6 +95,46 @@
     :log warning ("SendTelegramWithKeyboard - Failed: " . $SendErr);
     :return false;
   }
+}
+
+# ============================================================================
+# CREATE COMMAND BUTTONS (Helper for common commands)
+# ============================================================================
+
+:global CreateCommandButtons do={
+  :local Commands $1;  # Array of command strings (can be nested)
+  :local Result ({});
+  :local Row ({});
+  :local Count 0;
+  
+  # Handle nested arrays (e.g., {{"/status"; "/interfaces"}})
+  :foreach CmdOrArray in=$Commands do={
+    :if ([:typeof $CmdOrArray] = "array") do={
+      # Nested array - process each command
+      :foreach Cmd in=$CmdOrArray do={
+        :set ($Row->[:len $Row]) ({text=$Cmd; callback_data=("cmd:" . $Cmd)});
+        :set Count ($Count + 1);
+        :if ($Count = 2) do={
+          :set ($Result->[:len $Result]) $Row;
+          :set Row ({});
+          :set Count 0;
+        }
+      }
+    } else={
+      # Single command string
+      :set ($Row->[:len $Row]) ({text=$CmdOrArray; callback_data=("cmd:" . $CmdOrArray)});
+      :set Count ($Count + 1);
+      :if ($Count = 2) do={
+        :set ($Result->[:len $Result]) $Row;
+        :set Row ({});
+        :set Count 0;
+      }
+    }
+  }
+  :if ($Count > 0) do={
+    :set ($Result->[:len $Result]) $Row;
+  }
+  :return $Result;
 }
 
 # ============================================================================

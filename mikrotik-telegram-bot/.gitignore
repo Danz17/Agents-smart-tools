@@ -61,7 +61,7 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 
-# Python (if you add any Python tools)
+# Python (Claude Relay Node)
 __pycache__/
 *.py[cod]
 *$py.class
@@ -71,6 +71,9 @@ env/
 venv/
 ENV/
 *.egg-info/
+# Claude Relay Node configuration (actual config, not example)
+claude-relay-config.json
+claude-relay.log
 
 # Node.js (if you add any Node tools)
 node_modules/

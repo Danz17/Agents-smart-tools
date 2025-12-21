@@ -164,13 +164,18 @@ Return format: Just the RouterOS command, or "ERROR: <reason>" if not possible.
     return prompt
 
 
-def call_claude_api(user_message: str) -> Optional[str]:
-    """Call Claude API to process smart command."""
+def call_claude_api(user_message: str, custom_system_prompt: Optional[str] = None) -> Optional[str]:
+    """Call Claude API to process smart command.
+    
+    Args:
+        user_message: The user's message/command
+        custom_system_prompt: Optional custom system prompt (if None, uses default)
+    """
     if not CONFIG['claude_api_key']:
         logger.error("Claude API key not configured")
         return None
     
-    system_prompt = build_system_prompt()
+    system_prompt = custom_system_prompt or build_system_prompt()
     
     headers = {
         "x-api-key": CONFIG['claude_api_key'],
@@ -216,8 +221,12 @@ def call_claude_api(user_message: str) -> Optional[str]:
         return None
 
 
-def validate_routeros_command(command: str) -> tuple[bool, Optional[str]]:
-    """Validate RouterOS command syntax and safety."""
+def validate_routeros_command(command: str):
+    """Validate RouterOS command syntax and safety.
+    
+    Returns:
+        tuple: (is_valid: bool, validated_command_or_error: str)
+    """
     if not command or not command.strip():
         return False, "Empty command"
     
@@ -365,6 +374,93 @@ def execute_command():
         
     except Exception as e:
         logger.error(f"Error in execute_command endpoint: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/suggest-error-fix', methods=['POST'])
+def suggest_error_fix():
+    """Analyze command error and suggest fixes using Claude."""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                "success": False,
+                "error": "Missing request body"
+            }), 400
+        
+        original_command = data.get('original_command', '')
+        error_message = data.get('error_message', '')
+        command_output = data.get('command_output', '')
+        
+        if not original_command:
+            return jsonify({
+                "success": False,
+                "error": "Missing 'original_command' in request body"
+            }), 400
+        
+        # Build prompt for Claude to analyze the error
+        system_prompt = """You are a RouterOS command expert assistant. Your task is to analyze command errors and suggest fixes.
+
+When a RouterOS command fails, analyze:
+1. The original command that was attempted
+2. The error message or output
+3. Common RouterOS syntax issues
+
+Provide helpful suggestions including:
+- What went wrong
+- The corrected command (if possible)
+- Alternative approaches if the command cannot be fixed
+- Tips for avoiding similar errors
+
+Be concise and actionable. Focus on RouterOS-specific syntax and common mistakes."""
+
+        user_prompt = f"""A RouterOS command failed. Please analyze and suggest a fix.
+
+Original Command:
+{original_command}
+
+Error Message:
+{error_message}
+
+Command Output:
+{command_output}
+
+Please provide:
+1. What went wrong
+2. The corrected command (if applicable)
+3. Any alternative approaches
+
+Format your response clearly with the corrected command if possible."""
+
+        # Call Claude API with custom system prompt for error analysis
+        suggestion = call_claude_api(user_prompt, custom_system_prompt=system_prompt)
+        
+        if not suggestion:
+            return jsonify({
+                "success": False,
+                "error": "Failed to get suggestion from Claude API"
+            }), 500
+        
+        # Check if Claude returned an error
+        if suggestion.startswith("ERROR:"):
+            return jsonify({
+                "success": False,
+                "error": suggestion.replace("ERROR:", "").strip()
+            }), 500
+        
+        return jsonify({
+            "success": True,
+            "suggestion": suggestion,
+            "original_command": original_command,
+            "error_message": error_message
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in suggest_error_fix endpoint: {e}")
         return jsonify({
             "success": False,
             "error": str(e)

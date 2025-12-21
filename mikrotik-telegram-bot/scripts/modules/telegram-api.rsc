@@ -125,6 +125,16 @@
       critical=$IsCritical;
       subject=$Subject
     });
+    
+    # Also track if this is a command message (for result editing)
+    :local ReplyTo ($Notification->"replyto");
+    :if ([:len $ReplyTo] > 0 && $ReplyTo != "0") do={
+      :local CommandMsgKey ("cmd_" . [:tostr $ReplyTo]);
+      :if ([:typeof ($TelegramMessageHistory->$CommandMsgKey)] = "nothing") do={
+        :set ($TelegramMessageHistory->$CommandMsgKey) $MsgId;
+      }
+    }
+    
     [$SaveBotState "message-history" $TelegramMessageHistory];
     
     :return $MsgId;
@@ -309,6 +319,26 @@
   }
 }
 
+# Clean up old command message IDs on startup (older than 24 hours)
+:local CurrentTime [:timestamp];
+:local CleanedHistory ({});
+:local MonitoringMsgId ($TelegramMessageHistory->"monitoring_msg_id");
+:if ([:len $MonitoringMsgId] > 0) do={
+  :set ($CleanedHistory->"monitoring_msg_id") $MonitoringMsgId;
+}
+:foreach MsgId,MsgData in=$TelegramMessageHistory do={
+  :if ($MsgId != "monitoring_msg_id" && $MsgId ~ "^cmd_") do={
+    # Keep command message IDs (they're cleaned up when commands complete)
+    :set ($CleanedHistory->$MsgId) ($TelegramMessageHistory->$MsgId);
+  } else={
+    :if ($MsgId != "monitoring_msg_id") do={
+      # Keep regular message history
+      :set ($CleanedHistory->$MsgId) $MsgData;
+    }
+  }
+}
+:set TelegramMessageHistory $CleanedHistory;
+
 # ============================================================================
 # MARK MESSAGE AS CRITICAL
 # ============================================================================
@@ -454,23 +484,44 @@
   :global UrlEncode;
   :global CertificateAvailable;
 
+  :if ([:len $MessageId] = 0 || $MessageId = "0") do={
+    :return false;
+  }
+
   :local EditUrl ("https://api.telegram.org/bot" . $TelegramTokenId . "/editMessageText");
   :local HTTPData ("chat_id=" . $ChatId . \
     "&message_id=" . $MessageId . \
     "&text=" . [$UrlEncode $Text] . \
-    "&parse_mode=Markdown");
+    "&parse_mode=MarkdownV2");
 
   :if ([:len $KeyboardJSON] > 0) do={
     :set HTTPData ($HTTPData . "&reply_markup=" . [$UrlEncode $KeyboardJSON]);
   }
 
   :onerror EditErr {
+    :local ResponseData "";
     :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
-      /tool/fetch check-certificate=no output=none http-method=post $EditUrl http-data=$HTTPData;
+      :set ResponseData ([ /tool/fetch check-certificate=no output=user http-method=post $EditUrl http-data=$HTTPData as-value ]->"data");
     } else={
-      /tool/fetch check-certificate=yes-without-crl output=none http-method=post $EditUrl http-data=$HTTPData;
+      :set ResponseData ([ /tool/fetch check-certificate=yes-without-crl output=user http-method=post $EditUrl http-data=$HTTPData as-value ]->"data");
     }
-    :return true;
+    
+    # Check if edit was successful
+    :if ([:len $ResponseData] > 0) do={
+      :local ResponseJSON [:deserialize from=json $ResponseData];
+      :if (($ResponseJSON->"ok") = true) do={
+        :return true;
+      }
+      # Check for "message not found" or "message can't be edited" errors
+      :local ErrorCode ($ResponseJSON->"error_code");
+      :if ([:typeof $ErrorCode] = "num") do={
+        :if ($ErrorCode = 400 || $ErrorCode = 404) do={
+          :log debug ("telegram-api - Message deleted or can't be edited: " . $MessageId);
+          :return false;
+        }
+      }
+    }
+    :return false;
   } do={
     :log warning ("telegram-api - EditTelegramMessage failed: " . $EditErr);
     :return false;
@@ -559,6 +610,8 @@
 
   :global EditTelegramMessage;
   :global SendTelegram2;
+  :global SaveBotState;
+  :global LoadBotState;
 
   # If we have an existing message ID, try to edit it
   :if ([:len $ExistingMsgId] > 0 && $ExistingMsgId != "0") do={
@@ -566,10 +619,60 @@
     :if ($EditResult = true) do={
       :return $ExistingMsgId;
     }
+    # Message was deleted or edit failed, fall through to send new message
   }
 
   # Otherwise send new message
   :local NewMsgId [$SendTelegram2 ({ chatid=$ChatId; subject=""; message=$Text; silent=true })];
+  :return $NewMsgId;
+}
+
+# ============================================================================
+# GET OR CREATE MONITORING MESSAGE (Single shared message for all alerts)
+# ============================================================================
+
+:global GetOrCreateMonitoringMessage do={
+  :local ChatId [ :tostr $1 ];
+  :local MessageText [ :tostr $2 ];
+  
+  :global TelegramMessageHistory;
+  :global SendTelegram2;
+  :global EditTelegramMessage;
+  :global SaveBotState;
+  :global LoadBotState;
+  
+  # Ensure message history is loaded
+  :if ([:typeof $TelegramMessageHistory] != "array") do={
+    :local LoadedHistory [$LoadBotState "message-history"];
+    :if ([:typeof $LoadedHistory] = "array") do={
+      :set TelegramMessageHistory $LoadedHistory;
+    } else={
+      :set TelegramMessageHistory ({});
+    }
+  }
+  
+  :local MonitoringKey "monitoring_msg_id";
+  :local MonitoringMsgId "";
+  :if ([:typeof ($TelegramMessageHistory->$MonitoringKey)] = "str") do={
+    :set MonitoringMsgId ($TelegramMessageHistory->$MonitoringKey);
+  }
+  
+  # Try to edit existing message
+  :if ([:len $MonitoringMsgId] > 0 && $MonitoringMsgId != "0") do={
+    :local EditResult [$EditTelegramMessage $ChatId $MonitoringMsgId $MessageText ""];
+    :if ($EditResult = true) do={
+      :return $MonitoringMsgId;
+    }
+    # Message was deleted, clear ID
+    :set ($TelegramMessageHistory->$MonitoringKey) "";
+  }
+  
+  # Create new message
+  :local NewMsgId [$SendTelegram2 ({ chatid=$ChatId; subject=""; message=$MessageText; silent=true })];
+  :if ([:len $NewMsgId] > 0) do={
+    :set ($TelegramMessageHistory->$MonitoringKey) $NewMsgId;
+    [$SaveBotState "message-history" $TelegramMessageHistory];
+  }
   :return $NewMsgId;
 }
 
