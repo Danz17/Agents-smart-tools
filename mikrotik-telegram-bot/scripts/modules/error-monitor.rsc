@@ -178,11 +178,11 @@
   :local Prompt ("RouterOS Error Analysis Request:\n\n" . \
     "Error: " . $ErrorMessage . "\n\n" . \
     "Context:\n" . \
-    "- Device: " . [/system identity get name] . "\n" . \
-    "- RouterOS: " . [/system resource get version] . "\n" . \
-    "- Uptime: " . [/system resource get uptime] . "\n" . \
-    "- CPU: " . [/system resource get cpu-load] . "%\n" . \
-    "- RAM Free: " . [/system resource get free-memory] . "\n\n" . \
+    "- Device: " . [/system identity get value-name=name] . "\n" . \
+    "- RouterOS: " . [/system resource get value-name=version] . "\n" . \
+    "- Uptime: " . [/system resource get value-name=uptime] . "\n" . \
+    "- CPU: " . [/system resource get value-name=cpu-load] . "%\n" . \
+    "- RAM Free: " . [/system resource get value-name=free-memory] . "\n\n" . \
     "Additional Context: " . $ErrorContext . "\n\n" . \
     "Please analyze this error and respond in this exact format:\n" . \
     "CAUSE: <brief root cause>\n" . \
