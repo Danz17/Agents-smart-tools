@@ -380,7 +380,7 @@
     });
   } else={
     :set ($Buttons->[:len $Buttons]) ({
-      {text="🗑️ Uninstall"; callback_data=("uninstall:" . $ScriptId)}
+      {text="🗑️ Uninstall"; callback_data=("uninstall-ask:" . $ScriptId)}
     });
   }
   :set ($Buttons->[:len $Buttons]) ({
@@ -487,7 +487,54 @@
     }
   }
   
-  :if ($CallbackData ~ "^uninstall:") do={
+  # Handle uninstall confirmation request (show warning)
+  :if ($CallbackData ~ "^uninstall-ask:") do={
+    :local ScriptId [:pick $CallbackData 14 [:len $CallbackData]];
+    :local ScriptData [$GetScriptInfo $ScriptId];
+    :local ScriptName "Unknown Script";
+    :if ([:typeof $ScriptData] = "array") do={
+      :set ScriptName ($ScriptData->"name");
+    }
+
+    # Show confirmation dialog
+    :local ConfirmMsg ("*⚠️ Confirm Uninstall*
+
+");
+    :set ConfirmMsg ($ConfirmMsg . "Are you sure you want to uninstall:
+");
+    :set ConfirmMsg ($ConfirmMsg . "`" . $ScriptName . "`
+
+");
+    :set ConfirmMsg ($ConfirmMsg . "_This action cannot be undone._");
+
+    :local ConfirmButtons ({{
+      {text="✅ Yes, Uninstall"; callback_data=("uninstall-confirm:" . $ScriptId)}
+    }; {
+      {text="❌ Cancel"; callback_data=("script:" . $ScriptId)}
+    }});
+
+    :local KeyboardJSON [$CreateInlineKeyboard $ConfirmButtons];
+    :local EditUrl ("https://api.telegram.org/bot" . $TelegramTokenId . "/editMessageText");
+    :local HTTPData ("chat_id=" . $ChatId . \
+      "&message_id=" . $MessageId . \
+      "&text=" . [$UrlEncode $ConfirmMsg] . \
+      "&parse_mode=Markdown" . \
+      "&reply_markup=" . [$UrlEncode $KeyboardJSON]);
+
+    :onerror EditErr {
+      :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
+        /tool/fetch check-certificate=no output=none http-method=post $EditUrl http-data=$HTTPData;
+      } else={
+        /tool/fetch check-certificate=yes-without-crl output=none http-method=post $EditUrl http-data=$HTTPData;
+      }
+    } do={
+      :log warning ("interactive-menu - Failed to show uninstall confirmation: " . $EditErr);
+    }
+  }
+
+  # Handle uninstall confirmation (execute uninstall)
+  :if ($CallbackData ~ "^uninstall-confirm:") do={
+    :local ScriptId [:pick $CallbackData 18 [:len $CallbackData]];
     :local ScriptId [:pick $CallbackData 10 [:len $CallbackData]];
     :global UninstallScript;
     :local Result [$UninstallScript $ScriptId];
