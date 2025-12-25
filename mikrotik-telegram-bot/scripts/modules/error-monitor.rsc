@@ -396,9 +396,9 @@
       :if ($Count >= $ErrorMonitorMaxErrors) do={
         # Stop if max reached
       } else={
-        :local LogTime [/log get $LogId time];
-        :local LogMsg [/log get $LogId message];
-        :local LogTopics [/log get $LogId topics];
+        :local LogTime [/log get $LogId value-name=time];
+        :local LogMsg [/log get $LogId value-name=message];
+        :local LogTopics [/log get $LogId value-name=topics];
 
         # Create unique error ID (use first 20 chars or whole message if shorter)
         :local MsgLen [:len $LogMsg];
