@@ -1,4 +1,4 @@
-﻿#!rsc by RouterOS
+#!rsc by RouterOS
 # ═══════════════════════════════════════════════════════════════════════════
 # TxMTC - Telegram x MikroTik Tunnel Controller Sub-Agent
 # Configuration

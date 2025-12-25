@@ -1,0 +1,16 @@
+For ALL coding tasks, follow the development standards in C:\Users\Kratos\.config\ai-rules\rules.md
+
+Key rules (MUST follow):
+- 2 spaces indentation (never tabs)
+- camelCase (local variables), PascalCase (global variables), UPPER_SNAKE_CASE (constants)
+- Commits: "Type: Description" format (Add, Fix, Update, Remove, Refactor, Docs)
+- Explicit error handling, never silent failures
+- Never commit secrets, use .env files
+- Line wrap at 80, max 100 characters
+- Files: kebab-case naming
+- Comments: explain "why", not "what"
+
+When working on MikroTik/RouterOS projects:
+- Use :onerror for all external operations
+- Include TxMTC header banner in scripts
+- RouterOS 7.15+ required

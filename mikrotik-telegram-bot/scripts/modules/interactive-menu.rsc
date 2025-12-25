@@ -561,15 +561,16 @@
   :if ([:typeof $MonitorTempEnabled] != "bool") do={ :set MonitorTempEnabled true; }
   :if ([:typeof $MonitorVoltageEnabled] != "bool") do={ :set MonitorVoltageEnabled true; }
   
+  :local icons {false="❌"; true="✅"};
   :local SettingsMsg ("⚙️ *Monitoring Settings*\n\n");
   :set SettingsMsg ($SettingsMsg . "📊 *Enabled Monitoring:*\n");
-  :set SettingsMsg ($SettingsMsg . ($MonitorCPUEnabled ? "✅" : "❌") . " CPU\n");
-  :set SettingsMsg ($SettingsMsg . ($MonitorRAMEnabled ? "✅" : "❌") . " RAM\n");
-  :set SettingsMsg ($SettingsMsg . ($MonitorDiskEnabled ? "✅" : "❌") . " Disk\n");
-  :set SettingsMsg ($SettingsMsg . ($MonitorInterfacesEnabled ? "✅" : "❌") . " Interfaces\n");
-  :set SettingsMsg ($SettingsMsg . ($MonitorInternetEnabled ? "✅" : "❌") . " Internet\n");
-  :set SettingsMsg ($SettingsMsg . ($MonitorTempEnabled ? "✅" : "❌") . " Temperature\n");
-  :set SettingsMsg ($SettingsMsg . ($MonitorVoltageEnabled ? "✅" : "❌") . " Voltage\n\n");
+  :set SettingsMsg ($SettingsMsg . ($icons->[:tostr $MonitorCPUEnabled]) . " CPU\n");
+  :set SettingsMsg ($SettingsMsg . ($icons->[:tostr $MonitorRAMEnabled]) . " RAM\n");
+  :set SettingsMsg ($SettingsMsg . ($icons->[:tostr $MonitorDiskEnabled]) . " Disk\n");
+  :set SettingsMsg ($SettingsMsg . ($icons->[:tostr $MonitorInterfacesEnabled]) . " Interfaces\n");
+  :set SettingsMsg ($SettingsMsg . ($icons->[:tostr $MonitorInternetEnabled]) . " Internet\n");
+  :set SettingsMsg ($SettingsMsg . ($icons->[:tostr $MonitorTempEnabled]) . " Temperature\n");
+  :set SettingsMsg ($SettingsMsg . ($icons->[:tostr $MonitorVoltageEnabled]) . " Voltage\n\n");
   :set SettingsMsg ($SettingsMsg . "📈 *Thresholds:*\n");
   :set SettingsMsg ($SettingsMsg . "CPU: " . $MonitorCPUThreshold . "%\n");
   :set SettingsMsg ($SettingsMsg . "RAM: " . $MonitorRAMThreshold . "%\n");
@@ -577,16 +578,16 @@
   :set SettingsMsg ($SettingsMsg . "🔌 *Interfaces:*\n`" . $MonitorInterfaces . "`\n\n");
   :set SettingsMsg ($SettingsMsg . "Use `/monitor-interfaces` to configure\\.");
   
-  :local Buttons ({({
-    {text=($MonitorCPUEnabled ? "❌ CPU" : "✅ CPU"); callback_data="monitoring-settings:toggle:cpu"};
-    {text=($MonitorRAMEnabled ? "❌ RAM" : "✅ RAM"); callback_data="monitoring-settings:toggle:ram"}
-  }, {
-    {text=($MonitorDiskEnabled ? "❌ Disk" : "✅ Disk"); callback_data="monitoring-settings:toggle:disk"};
-    {text=($MonitorInterfacesEnabled ? "❌ Interfaces" : "✅ Interfaces"); callback_data="monitoring-settings:toggle:interfaces"}
-  }, {
-    {text=($MonitorInternetEnabled ? "❌ Internet" : "✅ Internet"); callback_data="monitoring-settings:toggle:internet"};
+  :local Buttons ({{
+    {text="Toggle CPU"; callback_data="monitoring-settings:toggle:cpu"};
+    {text="Toggle RAM"; callback_data="monitoring-settings:toggle:ram"}
+  }; {
+    {text="Toggle Disk"; callback_data="monitoring-settings:toggle:disk"};
+    {text="Toggle Interfaces"; callback_data="monitoring-settings:toggle:interfaces"}
+  }; {
+    {text="Toggle Internet"; callback_data="monitoring-settings:toggle:internet"};
     {text="🔌 Interfaces"; callback_data="cmd:/monitor-interfaces list"}
-  }, {
+  }; {
     {text="🔙 Back"; callback_data="menu:main"}
   }});
   

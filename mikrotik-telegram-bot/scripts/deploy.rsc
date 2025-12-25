@@ -82,11 +82,11 @@
     :onerror CertErr2 {
       /tool fetch url="https://curl.se/ca/cacert.pem" \
         mode=https dst-path=telegram-cert.pem
-      :delay 2s
+    :delay 2s
       /certificate import file-name=telegram-cert.pem passphrase=""
       :set CertInstalled true
       :put "  ✓ Certificate installed (CA Bundle)"
-    } do={
+  } do={
       :put "  ⚠ Certificate auto-install failed, trying without verification..."
     }
   }
@@ -183,7 +183,7 @@
     :if ([:len [/system script find where name="bot-config"]] > 0) do={
       /system script run bot-config
       :put "  ✓ Configuration loaded (ran script bot-config)"
-    } else={
+  } else={
       :put "  ⚠ bot-config.rsc not found and script bot-config missing"
     }
   }
@@ -313,11 +313,11 @@
 :put "[Step 8/8] Testing connectivity and starting bot..."
 
 :if ($TelegramTokenId != "YOUR_BOT_TOKEN_HERE" && [:len $TelegramTokenId] > 20) do={
-  :onerror ConnErr {
+:onerror ConnErr {
     :local Result [/tool fetch url=("https://api.telegram.org/bot" . $TelegramTokenId . "/getMe") \
       mode=https output=user as-value]
-    :put "  ✓ Telegram API reachable"
-  } do={
+  :put "  ✓ Telegram API reachable"
+} do={
     :put ("  ⚠ Telegram API test failed: " . $ConnErr)
   }
 } else={
@@ -326,8 +326,8 @@
     :put "  ✓ Internet connectivity OK"
   } do={
     :put ("  ✗ No internet connectivity: " . $ConnErr)
-    :set DeploymentFailed true
-  }
+  :set DeploymentFailed true
+}
 }
 
 :if ($DeploymentFailed = false) do={

@@ -131,7 +131,7 @@
     }
     :global TelegramTokenId;
     :set SendTelegram2 do={
-      :local Notification $1;
+    :local Notification $1;
       :global TelegramTokenId; :global TelegramChatId; :global TelegramThreadId; :global Identity; :global UrlEncode;
       :local ChatId ($Notification->"chatid"); :if ([:len $ChatId] = 0) do={ :set ChatId $TelegramChatId; }
       :local ThreadId ($Notification->"threadid"); :if ([:len $ThreadId] = 0) do={ :set ThreadId $TelegramThreadId; }
@@ -147,7 +147,7 @@
       :local Num [:tonum $1]; :local Div [:tonum $2]; :local Units ({""; "K"; "M"; "G"; "T"}); :local UnitIndex 0;
       :if ([:typeof $Div] != "num" || $Div = 0) do={ :set Div 1024; }
       :while ($Num >= $Div && $UnitIndex < 4) do={ :set Num ($Num / $Div); :set UnitIndex ($UnitIndex + 1); }
-      :return ([:tostr $Num] . ($Units->$UnitIndex));
+    :return ([:tostr $Num] . ($Units->$UnitIndex));
     }
   }
 
@@ -160,24 +160,24 @@
   :if ([:typeof $MonitorCPUEnabled] != "bool") do={ :set MonitorCPUEnabled true; }
   
   :if ($MonitorCPUEnabled = true) do={
-    :local Resource [ /system/resource/get ];
-    :local CurrentCPU (($Resource->"cpu-load") * 10);
-    
-    :if ([:typeof $CheckHealthCPUUtilization] != "num") do={
-      :set CheckHealthCPUUtilization $CurrentCPU;
-    }
-    
-    # 5-point moving average
-    :set CheckHealthCPUUtilization (($CheckHealthCPUUtilization * 4 + $CurrentCPU) / 5);
-    
+  :local Resource [ /system/resource/get ];
+  :local CurrentCPU (($Resource->"cpu-load") * 10);
+  
+  :if ([:typeof $CheckHealthCPUUtilization] != "num") do={
+    :set CheckHealthCPUUtilization $CurrentCPU;
+  }
+  
+  # 5-point moving average
+  :set CheckHealthCPUUtilization (($CheckHealthCPUUtilization * 4 + $CurrentCPU) / 5);
+  
     :if ($CheckHealthCPUUtilization > ($MonitorCPUThreshold * 10) && $CheckHealthCPUUtilizationNotified != true) do={
-      :set CheckHealthCPUUtilizationNotified true;
-      :log warning ($ScriptName . " - CPU utilization high: " . ($CheckHealthCPUUtilization / 10) . "%");
-    }
-    
+    :set CheckHealthCPUUtilizationNotified true;
+    :log warning ($ScriptName . " - CPU utilization high: " . ($CheckHealthCPUUtilization / 10) . "%");
+  }
+  
     :if ($CheckHealthCPUUtilization < (($MonitorCPUThreshold - 10) * 10) && $CheckHealthCPUUtilizationNotified = true) do={
-      :set CheckHealthCPUUtilizationNotified false;
-      :log info ($ScriptName . " - CPU utilization normal: " . ($CheckHealthCPUUtilization / 10) . "%");
+    :set CheckHealthCPUUtilizationNotified false;
+    :log info ($ScriptName . " - CPU utilization normal: " . ($CheckHealthCPUUtilization / 10) . "%");
     }
   }
 
@@ -193,14 +193,14 @@
   :local RAMPercent ($UsedRAM * 100 / $TotalRAM);
   
   :if ($MonitorRAMEnabled = true) do={
-    :if ($RAMPercent >= $MonitorRAMThreshold && $CheckHealthRAMUtilizationNotified != true) do={
-      :set CheckHealthRAMUtilizationNotified true;
-      :log warning ($ScriptName . " - RAM utilization high: " . $RAMPercent . "%");
-    }
-    
-    :if ($RAMPercent < ($MonitorRAMThreshold - 10) && $CheckHealthRAMUtilizationNotified = true) do={
-      :set CheckHealthRAMUtilizationNotified false;
-      :log info ($ScriptName . " - RAM utilization normal: " . $RAMPercent . "%");
+  :if ($RAMPercent >= $MonitorRAMThreshold && $CheckHealthRAMUtilizationNotified != true) do={
+    :set CheckHealthRAMUtilizationNotified true;
+    :log warning ($ScriptName . " - RAM utilization high: " . $RAMPercent . "%");
+  }
+  
+  :if ($RAMPercent < ($MonitorRAMThreshold - 10) && $CheckHealthRAMUtilizationNotified = true) do={
+    :set CheckHealthRAMUtilizationNotified false;
+    :log info ($ScriptName . " - RAM utilization normal: " . $RAMPercent . "%");
     }
   }
 
@@ -218,7 +218,7 @@
   :if ($MonitorDiskEnabled = true) do={
     :if ($HDDPercent >= $MonitorDiskThreshold && $CheckHealthDiskUtilizationNotified != true) do={
       :set CheckHealthDiskUtilizationNotified true;
-      :log warning ($ScriptName . " - Disk usage high: " . $HDDPercent . "%");
+    :log warning ($ScriptName . " - Disk usage high: " . $HDDPercent . "%");
     }
     
     :if ($HDDPercent < ($MonitorDiskThreshold - 10) && $CheckHealthDiskUtilizationNotified = true) do={
@@ -236,7 +236,7 @@
   :local TempVal "";
   :local TempStatus "N/A";
   :if ($MonitorTempEnabled = true) do={
-    :onerror TempErr {
+  :onerror TempErr {
       :set TempVal [ /system/health/get value-name=temperature ];
       :if ([:typeof $TempVal] = "num") do={
         :if ($TempVal > $MonitorTempThreshold) do={
@@ -245,7 +245,7 @@
         } else={
           :set TempStatus ("✅ " . [$FormatTemperature $TempVal]);
         }
-      }
+    }
     } do={ :log debug ($ScriptName . " - No temperature sensor available"); }
   }
 
@@ -258,7 +258,7 @@
   :local VoltageVal "";
   :local VoltageStatus "N/A";
   :if ($MonitorVoltageEnabled = true) do={
-    :onerror VoltErr {
+  :onerror VoltErr {
       :set VoltageVal [ /system/health/get value-name=voltage ];
       :if ([:typeof $VoltageVal] = "num") do={
         :if ($VoltageVal < $MonitorVoltageMin || $VoltageVal > $MonitorVoltageMax) do={
@@ -341,8 +341,8 @@
             :set ($CheckHealthInterfaceDown->$IntName) false;
             :set StateChanged true;
           }
-        }
-      } do={
+    }
+  } do={
         :log debug ($ScriptName . " - Error checking interface: " . $IntName);
       }
     }
@@ -497,12 +497,12 @@
   
   # Create buttons for monitoring message
   :global CreateInlineKeyboard;
-  :local Buttons ({({
-    {text="🔄 Update Now"; callback_data="monitoring:refresh"};
-    {text="📱 Connected Devices"; callback_data="monitoring:devices"}
-  }, {
-    {text="📋 Menu"; callback_data="cmd:/menu"};
-    {text="⚙️ Command"; callback_data="monitoring:command"}
+  :local Buttons ({{
+      {text="🔄 Update Now"; callback_data="monitoring:refresh"};
+      {text="📱 Connected Devices"; callback_data="monitoring:devices"}
+    }; {
+      {text="📋 Menu"; callback_data="cmd:/menu"};
+      {text="⚙️ Command"; callback_data="monitoring:command"}
   }});
   :local KeyboardJson "";
   :if ([:typeof $CreateInlineKeyboard] = "array") do={
@@ -557,9 +557,9 @@
         :if ($DeviceCount >= 20) do={
           :set DevicesMsg ($DevicesMsg . "_Showing first 20 devices_\n");
           :break;
+          }
         }
-      }
-    } do={
+      } do={
       :set DevicesMsg ($DevicesMsg . "_Error reading DHCP leases_");
     }
     

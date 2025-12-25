@@ -22,6 +22,10 @@ credentials.md
 **/secrets.txt
 **/tokens.txt
 **/set-credentials.rsc
+**/set-bot-credentials.rsc
+
+# Development rules (managed globally in ~/.config/ai-rules/)
+rules.md
 
 # Backup files
 *.backup
@@ -100,4 +104,3 @@ scratch.txt
 *.tar.gz
 *.rar
 *.7z
-

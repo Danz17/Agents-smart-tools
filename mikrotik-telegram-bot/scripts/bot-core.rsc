@@ -371,12 +371,12 @@
               [$AnswerCallbackQuery [:tostr $CallbackId] "" false];
             }
             # Process as if user sent the command
-            :set Command $CmdToExecute;
-            :set Message ($CallbackQuery->"message");
-            :set Chat ($Message->"chat");
-            :set From ($CallbackQuery->"from");
-            :set IsMyReply true;
-            :set IsAnyReply false;
+            :local Command $CmdToExecute;
+            :local Message ($CallbackQuery->"message");
+            :local Chat ($Message->"chat");
+            :local From ($CallbackQuery->"from");
+            :local IsMyReply true;
+            :local IsAnyReply false;
             # Fall through to process command (don't continue)
           } else={
             # Handle monitoring callbacks
@@ -487,12 +487,15 @@
           :set Done true;
         }
         
-        # Handle "?" - device query
+        # Handle "?" - device query (always responds, no activation needed)
         :if ($Done = false && $Command = "?") do={
           :log info ($ScriptName . " - Status query from update " . $UpdateID);
           :local ActiveStatus "passive";
           :if ($TelegramChatActive = true) do={ :set ActiveStatus "active"; }
-          :local StatusMsg ("Hey " . ($From->"first_name") . "\\! Online \\& " . $ActiveStatus . " | /help");
+          :local ActivateCmd ("! " . $Identity);
+          :local ActivationHint "Ready for commands\\.";
+          :if ($TelegramChatActive = false) do={ :set ActivationHint ("Send `" . $ActivateCmd . "` to activate\\."); }
+          :local StatusMsg ("Hey " . ($From->"first_name") . "\\! Online \\& " . $ActiveStatus . "\n\n" . $ActivationHint . "\n\n/help");
           :local CommonCmds ({{"/status"; "/interfaces"; "/dhcp"; "/logs"}});
           :local CommonButtons [$CreateCommandButtons $CommonCmds];
           :local KeyboardJson [$CreateInlineKeyboard $CommonButtons];
@@ -500,32 +503,49 @@
           :set Done true;
         }
         
-        # Handle "!" - activation command
+        # Handle "!" - activation command (always responds)
         :if ($Done = false && [:pick $Command 0 1] = "!") do={
           :local ActivationPattern ("^! *(" . $Identity . "|@" . $TelegramChatGroups . ")\$");
           :if ($Command ~ $ActivationPattern) do={
             :set TelegramChatActive true;
+            :local StatusText "active";
+            :local ActivateMsg ("✅ *Bot Activated\\!*\n\nYou can now send RouterOS commands\\.\n\nTry:\n`/interface print`\n`/ip dhcp-server lease print`\n\nOr use `/help` for more options\\.");
+            :local ActivateCmds ({{"/help"; "/status"; "/menu"}});
+            :local ActivateButtons [$CreateCommandButtons $ActivateCmds];
+            [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $ActivateMsg $ActivateButtons $ThreadId [:tostr ($Message->"message_id")]];
+            :log info ($ScriptName . " - Bot activated by " . $FromId . " from update " . $UpdateID);
           } else={
             :set TelegramChatActive false;
+            :local StatusText "passive";
+            :local DeactivateMsg ("❌ *Bot Deactivated*\n\nSend `! " . $Identity . "` to activate\\.");
+            [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $DeactivateMsg ({}) $ThreadId [:tostr ($Message->"message_id")]];
+            :log info ($ScriptName . " - Bot deactivated from update " . $UpdateID);
           }
-          :local StatusText "passive";
-          :if ($TelegramChatActive = true) do={ :set StatusText "active"; }
-          :log info ($ScriptName . " - Now " . $StatusText . " from update " . $UpdateID);
           :set Done true;
         }
         
-        # Handle /help command
+        # Handle /help command (always responds, no activation needed)
         :if ($Done = false && $Command = "/help") do={
-          :local HelpText ("*⚡ TxMTC v2.0*\n\n" . \
+          :local ActivateCmd ("! " . $Identity);
+          :local StatusSection "✅ *Bot is active*\nReady for commands\\.\n\n";
+          :if ($TelegramChatActive = false) do={ :set StatusSection ("⚠️ *Bot is passive*\nSend `" . $ActivateCmd . "` to activate\\.\n\n"); }
+          :local ExecuteHint "Send any RouterOS command\n";
+          :if ($TelegramChatActive != true) do={ :set ExecuteHint "Activate first, then send RouterOS commands\n"; }
+          :local SmartSection "";
+          :if ([:typeof $ClaudeRelayEnabled] = "bool" && $ClaudeRelayEnabled = true) do={ :set SmartSection "🤖 *Smart Commands:*\nNatural language \\(e\\.g\\. \"show interfaces\"\\)\n\n"; }
+          :local ClaudeAuthHint "";
+          :if ([:typeof $ClaudeRelayNativeEnabled] = "bool" && $ClaudeRelayNativeEnabled = true) do={ :set ClaudeAuthHint "`/authorize-claude` - Authorize Claude API\n"; }
+          :local HelpText ("*⚡ TxMTC v2\\.4\\.1*\n\n" . \
             "📱 *Control:*\n" . \
-            "`?` - Status | `! identity` - Activate\n\n" . \
-            "📊 *Info:*\n" . \
+            "`?` - Status | `" . $ActivateCmd . "` - Activate\n\n" . \
+            $StatusSection . \
+            "📊 *Info Commands:*\n" . \
             "`/status` `/interfaces` `/dhcp` `/logs` `/wireless`\n\n" . \
             "💾 *Manage:*\n" . \
             "`/backup` `/update`\n\n" . \
             "⚙️ *Execute:*\n" . \
-            "Activate & send any RouterOS command\n" . \
-            ([:typeof $ClaudeRelayEnabled] = "bool" && $ClaudeRelayEnabled = true ? "🤖 *Smart Commands:*\nNatural language (e.g., \"show interfaces\")\n\n" : "") . \
+            $ExecuteHint . \
+            $SmartSection . \
             "🛡️ *Security:*\n" . \
             "Rate: " . $CommandRateLimit . "/min | `CONFIRM code`\n\n" . \
             "🎮 *Interactive:*\n" . \
@@ -534,7 +554,7 @@
             "`/scripts` - List available scripts\n" . \
             "`/settings` - User preferences\n" . \
             "`/cleanup` - Clean old messages\n" . \
-            ([:typeof $ClaudeRelayNativeEnabled] = "bool" && $ClaudeRelayNativeEnabled = true ? "`/authorize-claude` - Authorize Claude API\n" : "") . \
+            $ClaudeAuthHint . \
             "\n─── by P̷h̷e̷n̷i̷x̷");
 
           :local HelpCmds ({{"/status"; "/interfaces"; "/dhcp"; "/logs"; "/menu"; "/modules"}});
