@@ -400,8 +400,11 @@
         :local LogMsg [/log get $LogId message];
         :local LogTopics [/log get $LogId topics];
 
-        # Create unique error ID
-        :local ErrorId ([:tostr $LogTime] . "-" . [:pick $LogMsg 0 20]);
+        # Create unique error ID (use first 20 chars or whole message if shorter)
+        :local MsgLen [:len $LogMsg];
+        :local IdLen 20;
+        :if ($MsgLen < 20) do={ :set IdLen $MsgLen; }
+        :local ErrorId ([:tostr $LogTime] . "-" . [:pick $LogMsg 0 $IdLen]);
 
         # Skip if already processed
         :if ([:typeof ($ErrorMonitorProcessedErrors->$ErrorId)] = "nothing") do={
@@ -559,13 +562,16 @@
   :local MaxAge 86400; # 24 hours in seconds
   :local Cleaned 0;
 
+  :local NewProcessed ({});
   :foreach ErrorId,ProcessedTime in=$ErrorMonitorProcessedErrors do={
     :local Age ($Now - $ProcessedTime);
-    :if ($Age > $MaxAge) do={
-      :set ($ErrorMonitorProcessedErrors->$ErrorId);
+    :if ($Age <= $MaxAge) do={
+      :set ($NewProcessed->$ErrorId) $ProcessedTime;
+    } else={
       :set Cleaned ($Cleaned + 1);
     }
   }
+  :set ErrorMonitorProcessedErrors $NewProcessed;
 
   :if ($Cleaned > 0) do={
     :log info ("[error-monitor] Cleaned up " . $Cleaned . " old error records");
