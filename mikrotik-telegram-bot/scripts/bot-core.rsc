@@ -1036,7 +1036,449 @@
           }
           :set Done true;
         }
-        
+
+        # Handle /hotspot command
+        :if ($Done = false && $Command ~ "^/hotspot") do={
+          :global HotspotMonitorLoaded;
+          :if ($HotspotMonitorLoaded != true) do={
+            :onerror LoadErr {
+              /system script run "modules/hotspot-monitor";
+            } do={
+              :log warning "[bot-core] - Could not load hotspot-monitor module";
+            }
+          }
+
+          :global ShowHotspotMenu;
+          :global GetHotspotActiveUsers;
+          :global FormatHotspotUsers;
+          :global DisconnectHotspotUser;
+          :global AddHotspotUser;
+          :global AddHotspotMacWhitelist;
+          :global BlockHotspotMac;
+          :global UnblockHotspotMac;
+
+          :local SubCmd "";
+          :local SubArg "";
+          :local SubArg2 "";
+          :local SubArg3 "";
+
+          # Parse command parts
+          :local CmdParts ({});
+          :local CurrentPart "";
+          :for I from=0 to=([:len $Command] - 1) do={
+            :local Char [:pick $Command $I ($I + 1)];
+            :if ($Char = " ") do={
+              :if ([:len $CurrentPart] > 0) do={
+                :set ($CmdParts->[:len $CmdParts]) $CurrentPart;
+                :set CurrentPart "";
+              }
+            } else={
+              :set CurrentPart ($CurrentPart . $Char);
+            }
+          }
+          :if ([:len $CurrentPart] > 0) do={ :set ($CmdParts->[:len $CmdParts]) $CurrentPart; }
+
+          :if ([:len $CmdParts] > 1) do={ :set SubCmd ($CmdParts->1); }
+          :if ([:len $CmdParts] > 2) do={ :set SubArg ($CmdParts->2); }
+          :if ([:len $CmdParts] > 3) do={ :set SubArg2 ($CmdParts->3); }
+          :if ([:len $CmdParts] > 4) do={ :set SubArg3 ($CmdParts->4); }
+
+          :local ResponseMsg "";
+
+          # List active users
+          :if ($SubCmd = "" || $SubCmd = "users" || $SubCmd = "active") do={
+            :if ([:typeof $GetHotspotActiveUsers] = "array") do={
+              :local Users [$GetHotspotActiveUsers];
+              :local Formatted [$FormatHotspotUsers $Users 1];
+              :set ResponseMsg ($Formatted->"message");
+            } else={
+              :set ResponseMsg "Hotspot module not available\\.";
+            }
+          }
+
+          # Kick/disconnect user
+          :if ($SubCmd = "kick" || $SubCmd = "disconnect") do={
+            :if ([:len $SubArg] > 0 && [:typeof $DisconnectHotspotUser] = "array") do={
+              :local Result [$DisconnectHotspotUser $SubArg];
+              :if (($Result->"success") = true) do={
+                :set ResponseMsg ("Disconnected " . ($Result->"count") . " user\\(s\\)");
+              } else={
+                :set ResponseMsg ("Failed: " . ($Result->"error"));
+              }
+            } else={
+              :set ResponseMsg "Usage: `/hotspot kick <user|mac|ip>`";
+            }
+          }
+
+          # Add user
+          :if ($SubCmd = "add") do={
+            :if ([:len $SubArg] > 0 && [:typeof $AddHotspotUser] = "array") do={
+              :local Result [$AddHotspotUser $SubArg $SubArg2 $SubArg3];
+              :if (($Result->"success") = true) do={
+                :set ResponseMsg ("Created hotspot user: `" . $SubArg . "`");
+              } else={
+                :set ResponseMsg ("Failed: " . ($Result->"error"));
+              }
+            } else={
+              :set ResponseMsg "Usage: `/hotspot add <username> [password] [profile]`";
+            }
+          }
+
+          # Whitelist MAC
+          :if ($SubCmd = "whitelist") do={
+            :if ([:len $SubArg] > 0 && [:typeof $AddHotspotMacWhitelist] = "array") do={
+              :local Result [$AddHotspotMacWhitelist $SubArg $SubArg2];
+              :if (($Result->"success") = true) do={
+                :set ResponseMsg ("Added to whitelist: `" . $SubArg . "`");
+              } else={
+                :set ResponseMsg ("Failed: " . ($Result->"error"));
+              }
+            } else={
+              :set ResponseMsg "Usage: `/hotspot whitelist <MAC> [comment]`";
+            }
+          }
+
+          # Block MAC
+          :if ($SubCmd = "block") do={
+            :if ([:len $SubArg] > 0 && [:typeof $BlockHotspotMac] = "array") do={
+              :local Result [$BlockHotspotMac $SubArg $SubArg2];
+              :if (($Result->"success") = true) do={
+                :set ResponseMsg ("Blocked MAC: `" . $SubArg . "`");
+              } else={
+                :set ResponseMsg ("Failed: " . ($Result->"error"));
+              }
+            } else={
+              :set ResponseMsg "Usage: `/hotspot block <MAC> [reason]`";
+            }
+          }
+
+          # Unblock MAC
+          :if ($SubCmd = "unblock") do={
+            :if ([:len $SubArg] > 0 && [:typeof $UnblockHotspotMac] = "array") do={
+              :local Result [$UnblockHotspotMac $SubArg];
+              :if (($Result->"success") = true) do={
+                :set ResponseMsg ("Unblocked MAC: `" . $SubArg . "`");
+              } else={
+                :set ResponseMsg ("Failed: " . ($Result->"error"));
+              }
+            } else={
+              :set ResponseMsg "Usage: `/hotspot unblock <MAC>`";
+            }
+          }
+
+          # Show menu (interactive)
+          :if ($SubCmd = "menu") do={
+            :if ([:typeof $ShowHotspotMenu] = "array") do={
+              [$ShowHotspotMenu [:tostr ($Chat->"id")] "0" $ThreadId];
+              :set Done true;
+            } else={
+              :set ResponseMsg "Hotspot menu not available\\.";
+            }
+          }
+
+          :if ($Done = false) do={
+            :local HotspotCmds ({{"/hotspot menu"; "/hotspot users"; "/menu"}});
+            :local HotspotButtons [$CreateCommandButtons $HotspotCmds];
+            [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $ResponseMsg $HotspotButtons $ThreadId [:tostr ($Message->"message_id")]];
+            :set Done true;
+          }
+        }
+
+        # Handle /bridge command
+        :if ($Done = false && $Command ~ "^/bridge") do={
+          :global BridgeVlanLoaded;
+          :if ($BridgeVlanLoaded != true) do={
+            :onerror LoadErr {
+              /system script run "modules/bridge-vlan";
+            } do={
+              :log warning "[bot-core] - Could not load bridge-vlan module";
+            }
+          }
+
+          :global ShowBridgeMenu;
+          :global GetBridges;
+          :global FormatBridges;
+          :global GetBridgePorts;
+          :global FormatBridgePorts;
+          :global GetBridgeVlans;
+          :global FormatBridgeVlans;
+          :global CreateBridge;
+          :global DeleteBridge;
+          :global AddBridgeVlan;
+          :global RemoveBridgeVlan;
+          :global SetPortPvid;
+          :global AddBridgePort;
+          :global RemoveBridgePort;
+
+          :local SubCmd "";
+          :local SubArg "";
+          :local SubArg2 "";
+          :local SubArg3 "";
+          :local SubArg4 "";
+
+          # Parse command parts
+          :local CmdParts ({});
+          :local CurrentPart "";
+          :for I from=0 to=([:len $Command] - 1) do={
+            :local Char [:pick $Command $I ($I + 1)];
+            :if ($Char = " ") do={
+              :if ([:len $CurrentPart] > 0) do={
+                :set ($CmdParts->[:len $CmdParts]) $CurrentPart;
+                :set CurrentPart "";
+              }
+            } else={
+              :set CurrentPart ($CurrentPart . $Char);
+            }
+          }
+          :if ([:len $CurrentPart] > 0) do={ :set ($CmdParts->[:len $CmdParts]) $CurrentPart; }
+
+          :if ([:len $CmdParts] > 1) do={ :set SubCmd ($CmdParts->1); }
+          :if ([:len $CmdParts] > 2) do={ :set SubArg ($CmdParts->2); }
+          :if ([:len $CmdParts] > 3) do={ :set SubArg2 ($CmdParts->3); }
+          :if ([:len $CmdParts] > 4) do={ :set SubArg3 ($CmdParts->4); }
+          :if ([:len $CmdParts] > 5) do={ :set SubArg4 ($CmdParts->5); }
+
+          :local ResponseMsg "";
+
+          # List bridges
+          :if ($SubCmd = "" || $SubCmd = "list") do={
+            :if ([:typeof $GetBridges] = "array") do={
+              :local Bridges [$GetBridges];
+              :set ResponseMsg [$FormatBridges $Bridges];
+            } else={
+              :set ResponseMsg "Bridge module not available\\.";
+            }
+          }
+
+          # Show ports
+          :if ($SubCmd = "ports") do={
+            :if ([:typeof $GetBridgePorts] = "array") do={
+              :local Ports [$GetBridgePorts $SubArg];
+              :set ResponseMsg [$FormatBridgePorts $Ports $SubArg];
+            } else={
+              :set ResponseMsg "Bridge module not available\\.";
+            }
+          }
+
+          # Show VLANs
+          :if ($SubCmd = "vlans") do={
+            :if ([:typeof $GetBridgeVlans] = "array") do={
+              :local Vlans [$GetBridgeVlans $SubArg];
+              :set ResponseMsg [$FormatBridgeVlans $Vlans $SubArg];
+            } else={
+              :set ResponseMsg "Bridge module not available\\.";
+            }
+          }
+
+          # Create bridge
+          :if ($SubCmd = "create") do={
+            :if ([:len $SubArg] > 0 && [:typeof $CreateBridge] = "array") do={
+              :local VlanFilter false;
+              :if ($SubArg2 = "yes" || $SubArg2 = "true") do={ :set VlanFilter true; }
+              :local Result [$CreateBridge $SubArg $VlanFilter];
+              :if (($Result->"success") = true) do={
+                :set ResponseMsg ("Created bridge: `" . $SubArg . "`");
+              } else={
+                :set ResponseMsg ("Failed: " . ($Result->"error"));
+              }
+            } else={
+              :set ResponseMsg "Usage: `/bridge create <name> [vlan-filter]`";
+            }
+          }
+
+          # Delete bridge
+          :if ($SubCmd = "delete") do={
+            :if ([:len $SubArg] > 0 && [:typeof $DeleteBridge] = "array") do={
+              :local Result [$DeleteBridge $SubArg];
+              :if (($Result->"success") = true) do={
+                :set ResponseMsg ("Deleted bridge: `" . $SubArg . "`");
+              } else={
+                :set ResponseMsg ("Failed: " . ($Result->"error"));
+              }
+            } else={
+              :set ResponseMsg "Usage: `/bridge delete <name>`";
+            }
+          }
+
+          # VLAN operations
+          :if ($SubCmd = "vlan") do={
+            :if ($SubArg = "add" && [:len $SubArg2] > 0) do={
+              :local VlanId [:tonum $SubArg3];
+              :if ([:typeof $AddBridgeVlan] = "array" && [:typeof $VlanId] = "num") do={
+                :local Result [$AddBridgeVlan $SubArg2 $VlanId $SubArg4 ""];
+                :if (($Result->"success") = true) do={
+                  :set ResponseMsg ("Added VLAN " . $VlanId . " to bridge `" . $SubArg2 . "`");
+                } else={
+                  :set ResponseMsg ("Failed: " . ($Result->"error"));
+                }
+              } else={
+                :set ResponseMsg "Usage: `/bridge vlan add <bridge> <vlan-id> [tagged]`";
+              }
+            }
+            :if ($SubArg = "remove" && [:len $SubArg2] > 0) do={
+              :local VlanId [:tonum $SubArg3];
+              :if ([:typeof $RemoveBridgeVlan] = "array" && [:typeof $VlanId] = "num") do={
+                :local Result [$RemoveBridgeVlan $SubArg2 $VlanId];
+                :if (($Result->"success") = true) do={
+                  :set ResponseMsg ("Removed VLAN " . $VlanId . " from bridge `" . $SubArg2 . "`");
+                } else={
+                  :set ResponseMsg ("Failed: " . ($Result->"error"));
+                }
+              } else={
+                :set ResponseMsg "Usage: `/bridge vlan remove <bridge> <vlan-id>`";
+              }
+            }
+          }
+
+          # Set PVID
+          :if ($SubCmd = "pvid") do={
+            :local Pvid [:tonum $SubArg2];
+            :if ([:len $SubArg] > 0 && [:typeof $Pvid] = "num" && [:typeof $SetPortPvid] = "array") do={
+              :local Result [$SetPortPvid $SubArg $Pvid];
+              :if (($Result->"success") = true) do={
+                :set ResponseMsg ("Set PVID " . $Pvid . " on port `" . $SubArg . "`");
+              } else={
+                :set ResponseMsg ("Failed: " . ($Result->"error"));
+              }
+            } else={
+              :set ResponseMsg "Usage: `/bridge pvid <interface> <pvid>`";
+            }
+          }
+
+          # Show menu (interactive)
+          :if ($SubCmd = "menu") do={
+            :if ([:typeof $ShowBridgeMenu] = "array") do={
+              [$ShowBridgeMenu [:tostr ($Chat->"id")] "0" $ThreadId];
+              :set Done true;
+            } else={
+              :set ResponseMsg "Bridge menu not available\\.";
+            }
+          }
+
+          :if ($Done = false) do={
+            :local BridgeCmds ({{"/bridge menu"; "/bridge ports"; "/bridge vlans"}});
+            :local BridgeButtons [$CreateCommandButtons $BridgeCmds];
+            [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $ResponseMsg $BridgeButtons $ThreadId [:tostr ($Message->"message_id")]];
+            :set Done true;
+          }
+        }
+
+        # Handle /setup command
+        :if ($Done = false && $Command ~ "^/setup") do={
+          :global SetupWizardLoaded;
+          :if ($SetupWizardLoaded != true) do={
+            :onerror LoadErr {
+              /system script run "modules/setup-wizard";
+            } do={
+              :log warning "[bot-core] - Could not load setup-wizard module";
+            }
+          }
+
+          :global ShowSetupWizard;
+          :global SetBotToken;
+          :global SetChatId;
+          :global AddTrustedUser;
+          :global RemoveTrustedUser;
+          :global ToggleSetupFeature;
+
+          :local SubCmd "";
+          :local SubArg "";
+
+          # Parse command parts
+          :local CmdParts ({});
+          :local CurrentPart "";
+          :for I from=0 to=([:len $Command] - 1) do={
+            :local Char [:pick $Command $I ($I + 1)];
+            :if ($Char = " ") do={
+              :if ([:len $CurrentPart] > 0) do={
+                :set ($CmdParts->[:len $CmdParts]) $CurrentPart;
+                :set CurrentPart "";
+              }
+            } else={
+              :set CurrentPart ($CurrentPart . $Char);
+            }
+          }
+          :if ([:len $CurrentPart] > 0) do={ :set ($CmdParts->[:len $CmdParts]) $CurrentPart; }
+
+          :if ([:len $CmdParts] > 1) do={ :set SubCmd ($CmdParts->1); }
+          :if ([:len $CmdParts] > 2) do={ :set SubArg [:pick $Command ([:len ($CmdParts->0)] + [:len ($CmdParts->1)] + 2) [:len $Command]]; }
+
+          :local ResponseMsg "";
+
+          # Show setup wizard (default)
+          :if ($SubCmd = "" || $SubCmd = "menu") do={
+            :if ([:typeof $ShowSetupWizard] = "array") do={
+              [$ShowSetupWizard [:tostr ($Chat->"id")] "0" $ThreadId];
+              :set Done true;
+            } else={
+              :set ResponseMsg "Setup wizard not available\\.";
+            }
+          }
+
+          # Set token
+          :if ($SubCmd = "token") do={
+            :if ([:len $SubArg] > 0 && [:typeof $SetBotToken] = "array") do={
+              :local Result [$SetBotToken $SubArg];
+              :if (($Result->"success") = true) do={
+                :set ResponseMsg ("Bot token configured\\! Bot: @" . ($Result->"username"));
+              } else={
+                :set ResponseMsg ("Failed: " . ($Result->"error"));
+              }
+            } else={
+              :set ResponseMsg "Usage: `/setup token <bot-token>`";
+            }
+          }
+
+          # Set chat ID
+          :if ($SubCmd = "chatid") do={
+            :if ([:len $SubArg] > 0 && [:typeof $SetChatId] = "array") do={
+              :local Result [$SetChatId $SubArg];
+              :if (($Result->"success") = true) do={
+                :set ResponseMsg ("Chat ID configured: `" . $SubArg . "`");
+              } else={
+                :set ResponseMsg ("Failed: " . ($Result->"error"));
+              }
+            } else={
+              :set ResponseMsg "Usage: `/setup chatid <chat-id>`";
+            }
+          }
+
+          # Add trusted user
+          :if ($SubCmd = "trust") do={
+            :if ([:len $SubArg] > 0 && [:typeof $AddTrustedUser] = "array") do={
+              :local Result [$AddTrustedUser $SubArg];
+              :if (($Result->"success") = true) do={
+                :set ResponseMsg ("Added trusted user: `" . $SubArg . "`");
+              } else={
+                :set ResponseMsg ("Failed: " . ($Result->"error"));
+              }
+            } else={
+              :set ResponseMsg "Usage: `/setup trust <user-id>`";
+            }
+          }
+
+          # Remove trusted user
+          :if ($SubCmd = "untrust") do={
+            :if ([:len $SubArg] > 0 && [:typeof $RemoveTrustedUser] = "array") do={
+              :local Result [$RemoveTrustedUser $SubArg];
+              :if (($Result->"success") = true) do={
+                :set ResponseMsg ("Removed trusted user: `" . $SubArg . "`");
+              } else={
+                :set ResponseMsg ("Failed: " . ($Result->"error"));
+              }
+            } else={
+              :set ResponseMsg "Usage: `/setup untrust <user-id>`";
+            }
+          }
+
+          :if ($Done = false && [:len $ResponseMsg] > 0) do={
+            :local SetupCmds ({{"/setup"; "/help"; "/menu"}});
+            :local SetupButtons [$CreateCommandButtons $SetupCmds];
+            [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $ResponseMsg $SetupButtons $ThreadId [:tostr ($Message->"message_id")]];
+            :set Done true;
+          }
+        }
+
         # Handle confirmation code (case-insensitive)
         :if ($Done = false && $Command ~ "^[Cc][Oo][Nn][Ff][Ii][Rr][Mm] [A-Za-z0-9]+\$") do={
           :local ConfirmCode [:pick $Command 8 [:len $Command]];

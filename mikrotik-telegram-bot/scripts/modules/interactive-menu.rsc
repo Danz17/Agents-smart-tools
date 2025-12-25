@@ -190,11 +190,18 @@
     {text="🔍 Search"; callback_data="menu:search"}
   });
   :set ($Buttons->[:len $Buttons]) ({
+    {text="🌐 Hotspot"; callback_data="menu:hotspot"};
+    {text="🌉 Bridge/VLAN"; callback_data="menu:bridge"}
+  });
+  :set ($Buttons->[:len $Buttons]) ({
     {text="⚙️ Settings"; callback_data="menu:settings"};
     {text="📊 Monitoring"; callback_data="cmd:/monitoring-settings"}
   });
   :set ($Buttons->[:len $Buttons]) ({
     {text="🤖 Error Monitor"; callback_data="menu:error-monitor"};
+    {text="🛠️ Setup"; callback_data="menu:setup"}
+  });
+  :set ($Buttons->[:len $Buttons]) ({
     {text="❌ Close"; callback_data="menu:close"}
   });
   
@@ -750,6 +757,100 @@
 
     # Refresh the settings menu
     [$ShowUserSettings $ChatId $MessageId $ThreadId];
+  }
+
+  # Handle hotspot callbacks
+  :if ($CallbackData ~ "^hotspot:") do={
+    :global HotspotMonitorLoaded;
+    :if ($HotspotMonitorLoaded != true) do={
+      :onerror LoadErr {
+        /system script run "modules/hotspot-monitor";
+      } do={
+        :log warning "[interactive-menu] - Could not load hotspot-monitor module";
+      }
+    }
+    :global HandleHotspotCallback;
+    :if ([:typeof $HandleHotspotCallback] = "array") do={
+      [$HandleHotspotCallback $ChatId $MessageId $CallbackData $ThreadId];
+    }
+  }
+
+  # Handle bridge callbacks
+  :if ($CallbackData ~ "^bridge:") do={
+    :global BridgeVlanLoaded;
+    :if ($BridgeVlanLoaded != true) do={
+      :onerror LoadErr {
+        /system script run "modules/bridge-vlan";
+      } do={
+        :log warning "[interactive-menu] - Could not load bridge-vlan module";
+      }
+    }
+    :global HandleBridgeCallback;
+    :if ([:typeof $HandleBridgeCallback] = "array") do={
+      [$HandleBridgeCallback $ChatId $MessageId $CallbackData $ThreadId];
+    }
+  }
+
+  # Handle setup wizard callbacks
+  :if ($CallbackData ~ "^setup:") do={
+    :global SetupWizardLoaded;
+    :if ($SetupWizardLoaded != true) do={
+      :onerror LoadErr {
+        /system script run "modules/setup-wizard";
+      } do={
+        :log warning "[interactive-menu] - Could not load setup-wizard module";
+      }
+    }
+    :global HandleSetupCallback;
+    :if ([:typeof $HandleSetupCallback] = "array") do={
+      [$HandleSetupCallback $ChatId $MessageId $CallbackData $ThreadId];
+    }
+  }
+
+  # Handle menu:hotspot, menu:bridge, menu:setup
+  :if ($CallbackData = "menu:hotspot") do={
+    :global HotspotMonitorLoaded;
+    :if ($HotspotMonitorLoaded != true) do={
+      :onerror LoadErr {
+        /system script run "modules/hotspot-monitor";
+      } do={
+        :log warning "[interactive-menu] - Could not load hotspot-monitor module";
+      }
+    }
+    :global ShowHotspotMenu;
+    :if ([:typeof $ShowHotspotMenu] = "array") do={
+      [$ShowHotspotMenu $ChatId $MessageId $ThreadId];
+    }
+  }
+
+  :if ($CallbackData = "menu:bridge") do={
+    :global BridgeVlanLoaded;
+    :if ($BridgeVlanLoaded != true) do={
+      :onerror LoadErr {
+        /system script run "modules/bridge-vlan";
+      } do={
+        :log warning "[interactive-menu] - Could not load bridge-vlan module";
+      }
+    }
+    :global ShowBridgeMenu;
+    :if ([:typeof $ShowBridgeMenu] = "array") do={
+      [$ShowBridgeMenu $ChatId $MessageId $ThreadId];
+    }
+  }
+
+  :if ($CallbackData = "menu:setup") do={
+    :global SetupWizardLoaded;
+    :if ($SetupWizardLoaded != true) do={
+      :onerror LoadErr {
+        /system script run "modules/setup-wizard";
+      } do={
+        :log warning "[interactive-menu] - Could not load setup-wizard module";
+      }
+    }
+    :global ShowSetupWizard;
+    :if ([:typeof $ShowSetupWizard] = "array") do={
+      [$ShowSetupWizard $ChatId $MessageId $ThreadId];
+    }
   }
 }
 
