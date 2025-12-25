@@ -27,7 +27,7 @@
 
 :global SharedFunctionsLoaded;
 :if ($SharedFunctionsLoaded != true) do={
-  :onerror LoadErr {
+  :onerror LoadErr in={
     /system script run "modules/shared-functions";
   } do={
     :log error "[error-monitor] - Failed to load shared-functions";
@@ -37,7 +37,7 @@
 
 :global TelegramAPILoaded;
 :if ($TelegramAPILoaded != true) do={
-  :onerror LoadErr {
+  :onerror LoadErr in={
     /system script run "modules/telegram-api";
   } do={
     :log warning "[error-monitor] - telegram-api not available";
@@ -191,7 +191,7 @@
     "PREVENTION: <brief prevention steps>\n\n" . \
     "If no fix command is applicable, set FIX: manual");
 
-  :onerror AnalyzeErr {
+  :onerror AnalyzeErr in={
     :local Response [$CallClaudeAPI $Prompt];
 
     :if (($Response->"success") = true) do={
@@ -291,7 +291,7 @@
   }
 
   # Execute the fix
-  :onerror FixErr {
+  :onerror FixErr in={
     [[:parse $Fix]];
     :log info ("[error-monitor] Applied fix: " . $Fix);
 
@@ -391,7 +391,7 @@
   :local Count 0;
 
   # Get recent error logs
-  :onerror ScanErr {
+  :onerror ScanErr in={
     :foreach LogId in=[/log find where topics~"error"] do={
       :if ($Count >= $ErrorMonitorMaxErrors) do={
         # Stop if max reached
@@ -501,7 +501,7 @@
   :set ErrorMonitorEnabled true;
 
   # Remove existing scheduler if any
-  :onerror RemoveErr {
+  :onerror RemoveErr in={
     /system scheduler remove [find name="TxMTC-ErrorMonitor"];
   } do={}
 
@@ -522,7 +522,7 @@
   :set ErrorMonitorEnabled false;
 
   # Remove scheduler
-  :onerror RemoveErr {
+  :onerror RemoveErr in={
     /system scheduler remove [find name="TxMTC-ErrorMonitor"];
   } do={}
 
