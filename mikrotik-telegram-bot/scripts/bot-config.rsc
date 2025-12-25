@@ -192,6 +192,28 @@
 :global RegistryUpdateInterval 1d
 
 # ============================================================================
+# MULTI-ROUTER MANAGEMENT
+# ============================================================================
+# Manage multiple MikroTik routers from a single bot instance
+
+# Enable multi-router functionality
+:global MultiRouterEnabled false
+
+# Python Relay Service URL
+# This is the address of your multi-router relay service
+:global MultiRouterRelayURL "http://192.168.1.100:5001"
+
+# API token for relay service authentication (optional)
+# Leave empty if relay is only accessible on trusted network
+:global MultiRouterApiToken ""
+
+# Timeout for relay service requests
+:global MultiRouterTimeout 15s
+
+# Default router name (use "local" for this device)
+:global DefaultRouter "local"
+
+# ============================================================================
 # INTERACTIVE FEATURES SETTINGS
 # ============================================================================
 

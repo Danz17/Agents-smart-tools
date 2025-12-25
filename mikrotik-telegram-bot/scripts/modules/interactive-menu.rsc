@@ -202,6 +202,7 @@
     {text="🛠️ Setup"; callback_data="menu:setup"}
   });
   :set ($Buttons->[:len $Buttons]) ({
+    {text="🌐 Routers"; callback_data="menu:routers"};
     {text="❌ Close"; callback_data="menu:close"}
   });
   
@@ -807,6 +808,32 @@
     }
   }
 
+  # Handle router callbacks
+  :if ($CallbackData ~ "^router:") do={
+    :global MultiRouterLoaded;
+    :if ($MultiRouterLoaded != true) do={
+      :onerror LoadErr {
+        /system script run "modules/multi-router";
+      } do={
+        :log warning "[interactive-menu] - Could not load multi-router module";
+      }
+    }
+    :global HandleRouterCallback;
+    :if ([:typeof $HandleRouterCallback] = "array") do={
+      # Parse callback: router:action:param
+      :local Parts [:toarray ""];
+      :local TmpData [:pick $CallbackData 7 [:len $CallbackData]];
+      :local ColonPos [:find $TmpData ":"];
+      :local Action $TmpData;
+      :local Param "";
+      :if ([:typeof $ColonPos] = "num") do={
+        :set Action [:pick $TmpData 0 $ColonPos];
+        :set Param [:pick $TmpData ($ColonPos + 1) [:len $TmpData]];
+      }
+      [$HandleRouterCallback $Action $Param $CallbackId];
+    }
+  }
+
   # Handle menu:hotspot, menu:bridge, menu:setup
   :if ($CallbackData = "menu:hotspot") do={
     :global HotspotMonitorLoaded;
@@ -850,6 +877,21 @@
     :global ShowSetupWizard;
     :if ([:typeof $ShowSetupWizard] = "array") do={
       [$ShowSetupWizard $ChatId $MessageId $ThreadId];
+    }
+  }
+
+  :if ($CallbackData = "menu:routers") do={
+    :global MultiRouterLoaded;
+    :if ($MultiRouterLoaded != true) do={
+      :onerror LoadErr {
+        /system script run "modules/multi-router";
+      } do={
+        :log warning "[interactive-menu] - Could not load multi-router module";
+      }
+    }
+    :global ShowRoutersMenu;
+    :if ([:typeof $ShowRoutersMenu] = "array") do={
+      [$ShowRoutersMenu];
     }
   }
 }

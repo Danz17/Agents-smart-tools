@@ -1479,6 +1479,195 @@
           }
         }
 
+        # Handle /routers command
+        :if ($Done = false && $Command ~ "^/routers") do={
+          :global MultiRouterLoaded;
+          :if ($MultiRouterLoaded != true) do={
+            :onerror LoadErr {
+              /system script run "modules/multi-router";
+            } do={
+              :log warning "[bot-core] - Could not load multi-router module";
+            }
+          }
+
+          :global ShowRoutersMenu;
+          :global ListRouters;
+          :global RegisterRouter;
+          :global RemoveRouter;
+          :global SwitchActiveRouter;
+          :global GetRouterStatus;
+          :global FormatRouterStatus;
+          :global ExecuteRemoteCommand;
+          :global ActiveRouter;
+
+          :local SubCmd "";
+          :local CmdParts [:toarray ""];
+          :local SpacePos [:find $Command " "];
+
+          :if ([:typeof $SpacePos] = "num") do={
+            :set SubCmd [:pick $Command ($SpacePos + 1) [:len $Command]];
+            :local TmpCmd $SubCmd;
+            :while ([:find $TmpCmd " "] != nil) do={
+              :local Sp [:find $TmpCmd " "];
+              :set ($CmdParts->[:len $CmdParts]) [:pick $TmpCmd 0 $Sp];
+              :set TmpCmd [:pick $TmpCmd ($Sp + 1) [:len $TmpCmd]];
+            }
+            :if ([:len $TmpCmd] > 0) do={
+              :set ($CmdParts->[:len $CmdParts]) $TmpCmd;
+            }
+          }
+
+          :local Action ($CmdParts->0);
+          :local ResponseMsg "";
+
+          # /routers (no args) - show menu
+          :if ([:len $Action] = 0 || $Action = "list") do={
+            :if ([:typeof $ShowRoutersMenu] = "array") do={
+              [$ShowRoutersMenu];
+              :set Done true;
+            } else={
+              :set ResponseMsg "Multi-router module not loaded";
+            }
+          }
+
+          # /routers add <name> <host> <user> <pass> [port]
+          :if ($Done = false && $Action = "add") do={
+            :local Name ($CmdParts->1);
+            :local Host ($CmdParts->2);
+            :local User ($CmdParts->3);
+            :local Pass ($CmdParts->4);
+            :local Port ($CmdParts->5);
+
+            :if ([:len $Name] > 0 && [:len $Host] > 0 && [:len $User] > 0 && [:len $Pass] > 0) do={
+              :if ([:len $Port] = 0) do={ :set Port 8728; }
+              :local Result [$RegisterRouter $Name $Host $User $Pass [:tonum $Port] ""];
+              :if (($Result->"success") = true) do={
+                :set ResponseMsg ("Router added: *" . $Name . "*\n\nHost: `" . $Host . "`\nPort: `" . $Port . "`");
+              } else={
+                :set ResponseMsg ("Failed to add router\n\n" . ($Result->"error"));
+              }
+            } else={
+              :set ResponseMsg "Usage: `/routers add <name> <host> <user> <pass> [port]`\n\nExample:\n`/routers add office 192.168.1.1 admin secret`";
+            }
+          }
+
+          # /routers remove <name>
+          :if ($Done = false && $Action = "remove") do={
+            :local Name ($CmdParts->1);
+            :if ([:len $Name] > 0) do={
+              :local Result [$RemoveRouter $Name];
+              :if (($Result->"success") = true) do={
+                :set ResponseMsg ("Router removed: *" . $Name . "*");
+              } else={
+                :set ResponseMsg ($Result->"error");
+              }
+            } else={
+              :set ResponseMsg "Usage: `/routers remove <name>`";
+            }
+          }
+
+          # /routers switch <name>
+          :if ($Done = false && $Action = "switch") do={
+            :local Name ($CmdParts->1);
+            :if ([:len $Name] > 0) do={
+              :local Result [$SwitchActiveRouter $Name];
+              :if (($Result->"success") = true) do={
+                :set ResponseMsg ($Result->"message");
+              } else={
+                :set ResponseMsg ($Result->"error");
+              }
+            } else={
+              :set ResponseMsg ("Usage: `/routers switch <name>`\n\nCurrent: *" . $ActiveRouter . "*");
+            }
+          }
+
+          # /routers status [name]
+          :if ($Done = false && $Action = "status") do={
+            :local Name ($CmdParts->1);
+            :if ([:len $Name] = 0) do={ :set Name $ActiveRouter; }
+            :if ($Name = "local") do={
+              :local Identity [/system identity get name];
+              :local Resources [/system resource get];
+              :local Version ($Resources->"version");
+              :local Uptime ($Resources->"uptime");
+              :local CPULoad ($Resources->"cpu-load");
+              :local FreeMem ($Resources->"free-memory");
+              :local TotalMem ($Resources->"total-memory");
+              :local MemPct (100 - (($FreeMem * 100) / $TotalMem));
+              :set ResponseMsg ("*local* - Online\n\nIdentity: `" . $Identity . "`\nRouterOS: `" . $Version . "`\nUptime: `" . $Uptime . "`\nCPU: `" . $CPULoad . "%`\nRAM: `" . $MemPct . "%`");
+            } else={
+              :local Status [$GetRouterStatus $Name];
+              :set ResponseMsg [$FormatRouterStatus $Status];
+            }
+          }
+
+          # /routers exec <name> <command>
+          :if ($Done = false && ($Action = "exec" || $Action = "run")) do={
+            :local Name ($CmdParts->1);
+            :local RemoteCmd "";
+            :for I from=2 to=([:len $CmdParts] - 1) do={
+              :if ([:len $RemoteCmd] > 0) do={ :set RemoteCmd ($RemoteCmd . " "); }
+              :set RemoteCmd ($RemoteCmd . ($CmdParts->$I));
+            }
+            :if ([:len $Name] > 0 && [:len $RemoteCmd] > 0) do={
+              :local Result [$ExecuteRemoteCommand $Name $RemoteCmd];
+              :if (($Result->"success") = true) do={
+                :set ResponseMsg ("*" . $Name . "* executed:\n`" . $RemoteCmd . "`\n\nResult: `" . ($Result->"result") . "`");
+              } else={
+                :set ResponseMsg ("Execution failed on *" . $Name . "*\n\n" . ($Result->"error"));
+              }
+            } else={
+              :set ResponseMsg "Usage: `/routers exec <name> <command>`\n\nExample:\n`/routers exec office /system/identity`";
+            }
+          }
+
+          :if ($Done = false && [:len $ResponseMsg] > 0) do={
+            :local RouterCmds ({{"/routers"; "/routers status"; "/menu"}});
+            :local RouterButtons [$CreateCommandButtons $RouterCmds];
+            [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $ResponseMsg $RouterButtons $ThreadId [:tostr ($Message->"message_id")]];
+            :set Done true;
+          }
+        }
+
+        # Handle @router command prefix for remote execution
+        :if ($Done = false && $Command ~ "^@[a-zA-Z0-9_-]+") do={
+          :global MultiRouterLoaded;
+          :if ($MultiRouterLoaded != true) do={
+            :onerror LoadErr {
+              /system script run "modules/multi-router";
+            } do={
+              :log warning "[bot-core] - Could not load multi-router module";
+            }
+          }
+          :global ExecuteRemoteCommand;
+          :local SpacePos [:find $Command " "];
+          :if ([:typeof $SpacePos] = "num") do={
+            :local RouterName [:pick $Command 1 $SpacePos];
+            :local RemoteCmd [:pick $Command ($SpacePos + 1) [:len $Command]];
+            :if ([:len $RouterName] > 0 && [:len $RemoteCmd] > 0) do={
+              :local Result [$ExecuteRemoteCommand $RouterName $RemoteCmd];
+              :local ResponseMsg "";
+              :if (($Result->"success") = true) do={
+                :set ResponseMsg ("*@" . $RouterName . "* executed:\n`" . $RemoteCmd . "`\n\n");
+                :local ResultData ($Result->"result");
+                :if ([:typeof $ResultData] = "array") do={
+                  :foreach Item in=$ResultData do={
+                    :set ResponseMsg ($ResponseMsg . $Item . "\n");
+                  }
+                } else={
+                  :set ResponseMsg ($ResponseMsg . "Result: `" . [:tostr $ResultData] . "`");
+                }
+              } else={
+                :set ResponseMsg ("Failed on *@" . $RouterName . "*\n\n" . ($Result->"error"));
+              }
+              :local RouterCmds ({{"/routers"; "/routers status " . $RouterName; "/menu"}});
+              :local RouterButtons [$CreateCommandButtons $RouterCmds];
+              [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $ResponseMsg $RouterButtons $ThreadId [:tostr ($Message->"message_id")]];
+              :set Done true;
+            }
+          }
+        }
+
         # Handle confirmation code (case-insensitive)
         :if ($Done = false && $Command ~ "^[Cc][Oo][Nn][Ff][Ii][Rr][Mm] [A-Za-z0-9]+\$") do={
           :local ConfirmCode [:pick $Command 8 [:len $Command]];

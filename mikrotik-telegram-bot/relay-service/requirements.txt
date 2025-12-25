@@ -1,0 +1,17 @@
+# TxMTC Multi-Router Relay Service Dependencies
+# Install with: pip install -r requirements.txt
+
+# Web framework
+flask>=2.0.0
+
+# MikroTik RouterOS API client
+routeros-api>=0.17.0
+
+# Encryption for credential storage
+cryptography>=3.4.0
+
+# HTTP requests (for health checks)
+requests>=2.25.0
+
+# Optional: Production WSGI server
+gunicorn>=20.1.0
