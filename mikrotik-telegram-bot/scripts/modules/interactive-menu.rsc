@@ -194,6 +194,7 @@
     {text="📊 Monitoring"; callback_data="cmd:/monitoring-settings"}
   });
   :set ($Buttons->[:len $Buttons]) ({
+    {text="🤖 Error Monitor"; callback_data="menu:error-monitor"};
     {text="❌ Close"; callback_data="menu:close"}
   });
   
@@ -450,6 +451,9 @@
         message="Settings menu coming soon..."
       });
     }
+    :if ($Action = "error-monitor") do={
+      [$ShowErrorMonitorSettings $ChatId $MessageId $ThreadId];
+    }
   }
   
   :if ($CallbackData ~ "^cat:") do={
@@ -595,6 +599,40 @@
     # Refresh the settings menu to show updated state
     [$ShowMonitoringSettings $ChatId $MessageId $ThreadId];
   }
+
+  # Handle error monitor toggles
+  :if ($CallbackData ~ "^error-monitor:") do={
+    :local Action [:pick $CallbackData 14 [:len $CallbackData]];
+    :global ErrorMonitorEnabled;
+    :global ErrorMonitorAutoFix;
+    :global StartErrorMonitor;
+    :global StopErrorMonitor;
+    :global RunErrorMonitor;
+
+    :if ($Action = "toggle") do={
+      :if ($ErrorMonitorEnabled = true) do={
+        [$StopErrorMonitor];
+      } else={
+        [$StartErrorMonitor];
+      }
+    }
+    :if ($Action = "autofix") do={
+      :set ErrorMonitorAutoFix (!$ErrorMonitorAutoFix);
+    }
+    :if ($Action = "scan") do={
+      [$RunErrorMonitor];
+      $SendTelegram2 ({
+        chatid=$ChatId;
+        threadid=$ThreadId;
+        silent=true;
+        subject="⚡ TxMTC | Error Monitor";
+        message="🔍 Manual error scan triggered..."
+      });
+    }
+
+    # Refresh the error monitor menu
+    [$ShowErrorMonitorSettings $ChatId $MessageId $ThreadId];
+  }
 }
 
 # ============================================================================
@@ -681,6 +719,92 @@
     }
   } else={
     # Send new message
+    [$SendTelegramWithKeyboard $ChatId $SettingsMsg $KeyboardJson $ThreadId];
+  }
+}
+
+# ============================================================================
+# SHOW ERROR MONITOR SETTINGS MENU
+# ============================================================================
+
+:global ShowErrorMonitorSettings do={
+  :local ChatId [:tostr $1];
+  :local MessageId [:tostr $2];
+  :local ThreadId [:tostr $3];
+
+  :global ErrorMonitorEnabled;
+  :global ErrorMonitorAutoFix;
+  :global ErrorMonitorInterval;
+  :global ErrorMonitorProcessedErrors;
+  :global ErrorMonitorFixHistory;
+  :global ClaudeRelayNativeEnabled;
+  :global TelegramTokenId;
+  :global UrlEncode;
+  :global CertificateAvailable;
+  :global CreateInlineKeyboard;
+  :global SendTelegramWithKeyboard;
+
+  # Initialize if not set
+  :if ([:typeof $ErrorMonitorEnabled] != "bool") do={ :set ErrorMonitorEnabled false; }
+  :if ([:typeof $ErrorMonitorAutoFix] != "bool") do={ :set ErrorMonitorAutoFix false; }
+  :if ([:typeof $ErrorMonitorInterval] != "time") do={ :set ErrorMonitorInterval 00:01:00; }
+  :if ([:typeof $ErrorMonitorProcessedErrors] != "array") do={ :set ErrorMonitorProcessedErrors ({}); }
+  :if ([:typeof $ErrorMonitorFixHistory] != "array") do={ :set ErrorMonitorFixHistory ({}); }
+
+  :local ProcessedCount [:len $ErrorMonitorProcessedErrors];
+  :local FixCount [:len $ErrorMonitorFixHistory];
+  :local ClaudeStatus "❌ Not Available";
+  :if ($ClaudeRelayNativeEnabled = true) do={ :set ClaudeStatus "✅ Ready"; }
+
+  :local icons {false="❌"; true="✅"};
+  :local StatusIcon ($icons->[:tostr $ErrorMonitorEnabled]);
+  :local AutoFixIcon ($icons->[:tostr $ErrorMonitorAutoFix]);
+
+  :local SettingsMsg ("🤖 *Error Monitor Settings*\n\n");
+  :set SettingsMsg ($SettingsMsg . "*Status:* " . $StatusIcon . "\n");
+  :set SettingsMsg ($SettingsMsg . "*Auto-Fix:* " . $AutoFixIcon . "\n");
+  :set SettingsMsg ($SettingsMsg . "*Interval:* " . [:tostr $ErrorMonitorInterval] . "\n\n");
+  :set SettingsMsg ($SettingsMsg . "*Claude AI:* " . $ClaudeStatus . "\n\n");
+  :set SettingsMsg ($SettingsMsg . "📊 *Statistics:*\n");
+  :set SettingsMsg ($SettingsMsg . "Errors Processed: " . $ProcessedCount . "\n");
+  :set SettingsMsg ($SettingsMsg . "Fixes Applied: " . $FixCount . "\n\n");
+  :set SettingsMsg ($SettingsMsg . "_When enabled, system logs are scanned for errors and analyzed by Claude AI._");
+
+  :local ToggleText "▶️ Enable";
+  :if ($ErrorMonitorEnabled = true) do={ :set ToggleText "⏹️ Disable"; }
+
+  :local AutoFixText "Enable Auto-Fix";
+  :if ($ErrorMonitorAutoFix = true) do={ :set AutoFixText "Disable Auto-Fix"; }
+
+  :local Buttons ({{
+    {text=$ToggleText; callback_data="error-monitor:toggle"}
+  }; {
+    {text=$AutoFixText; callback_data="error-monitor:autofix"};
+    {text="🔍 Scan Now"; callback_data="error-monitor:scan"}
+  }; {
+    {text="🔙 Back"; callback_data="menu:main"}
+  }});
+
+  :local KeyboardJson [$CreateInlineKeyboard $Buttons];
+
+  :if ([:len $MessageId] > 0 && $MessageId != "0" && $MessageId != "") do={
+    :local EditUrl ("https://api.telegram.org/bot" . $TelegramTokenId . "/editMessageText");
+    :local HTTPData ("chat_id=" . $ChatId . \
+      "&message_id=" . $MessageId . \
+      "&text=" . [$UrlEncode $SettingsMsg] . \
+      "&parse_mode=Markdown" . \
+      "&reply_markup=" . [$UrlEncode $KeyboardJson]);
+
+    :onerror EditErr {
+      :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
+        /tool/fetch check-certificate=no output=none http-method=post $EditUrl http-data=$HTTPData;
+      } else={
+        /tool/fetch check-certificate=yes-without-crl output=none http-method=post $EditUrl http-data=$HTTPData;
+      }
+    } do={
+      :log warning ("ShowErrorMonitorSettings - Failed to edit: " . $EditErr);
+    }
+  } else={
     [$SendTelegramWithKeyboard $ChatId $SettingsMsg $KeyboardJson $ThreadId];
   }
 }

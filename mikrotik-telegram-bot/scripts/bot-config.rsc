@@ -340,6 +340,32 @@
 :global ClaudeAPITimeout 30s
 
 # ============================================================================
+# AUTONOMOUS ERROR MONITOR SETTINGS
+# ============================================================================
+
+# Enable autonomous error monitoring with Claude AI analysis
+# When enabled, system logs are scanned for errors and analyzed by Claude
+:global ErrorMonitorEnabled false
+
+# How often to scan for new errors
+:global ErrorMonitorInterval 00:01:00
+
+# Enable automatic fix application
+# When enabled, safe fixes suggested by Claude are automatically applied
+# CAUTION: Only enable if you trust the system to make changes autonomously
+:global ErrorMonitorAutoFix false
+
+# Admin chat ID for error notifications
+# Leave empty to use default TelegramChatId
+:global ErrorMonitorAdminChatId ""
+
+# Maximum errors to process per scan
+:global ErrorMonitorMaxErrors 10
+
+# Cooldown between processing same error type
+:global ErrorMonitorCooldown 00:05:00
+
+# ============================================================================
 # COMMAND EXECUTION SETTINGS
 # ============================================================================
 
