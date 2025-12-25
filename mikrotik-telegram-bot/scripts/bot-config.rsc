@@ -214,6 +214,37 @@
 :global DefaultRouter "local"
 
 # ============================================================================
+# GITHUB AI RELAY (Serverless Claude AI)
+# ============================================================================
+# Uses GitHub Actions to process natural language commands via Claude API
+# No local server required - works 24/7 via GitHub
+
+# Enable GitHub AI relay
+:global GitHubAIRelayEnabled false
+
+# GitHub repository owner
+:global GitHubRepoOwner "Danz17"
+
+# GitHub repository name
+:global GitHubRepoName "Agents-smart-tools"
+
+# GitHub personal access token (with repo write access)
+# Create at: https://github.com/settings/tokens
+:global GitHubToken ""
+
+# Branch to use for commands
+:global GitHubBranch "main"
+
+# How often to poll for AI response
+:global GitHubPollInterval 5s
+
+# Maximum time to wait for AI response
+:global GitHubPollTimeout 60s
+
+# Auto-execute translated commands (false = show first, require confirmation)
+:global GitHubAutoExecute false
+
+# ============================================================================
 # INTERACTIVE FEATURES SETTINGS
 # ============================================================================
 

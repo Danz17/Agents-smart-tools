@@ -1734,6 +1734,11 @@
                   :if ([:typeof $ClaudeRelayEnabled] = "bool" && $ClaudeRelayEnabled = true && \
                        [:typeof $ProcessSmartCommand] = "array") do={
                     :set SmartResult [$ProcessSmartCommand $Command];
+                  } else={
+                    # GitHub Actions AI relay as fallback
+                    :if ([:typeof $GitHubAIRelayEnabled] = "bool" && $GitHubAIRelayEnabled = true &&                          [:typeof $ProcessSmartCommandGitHub] = "array") do={
+                      :set SmartResult [$ProcessSmartCommandGitHub $Command];
+                    }
                   }
                 }
                 

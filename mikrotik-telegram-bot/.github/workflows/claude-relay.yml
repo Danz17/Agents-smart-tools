@@ -1,0 +1,119 @@
+name: Claude AI Relay
+
+on:
+  push:
+    paths:
+      - 'commands/pending.json'
+  workflow_dispatch:
+    inputs:
+      command:
+        description: 'Manual command to process'
+        required: false
+
+jobs:
+  process-command:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for pending commands
+        id: check
+        run: |
+          if [ -f "commands/pending.json" ]; then
+            CONTENT=$(cat commands/pending.json)
+            if [ "$CONTENT" != "{}" ] && [ "$CONTENT" != "[]" ] && [ -n "$CONTENT" ]; then
+              echo "has_pending=true" >> $GITHUB_OUTPUT
+              echo "Found pending commands"
+            else
+              echo "has_pending=false" >> $GITHUB_OUTPUT
+              echo "No pending commands"
+            fi
+          else
+            echo "has_pending=false" >> $GITHUB_OUTPUT
+            echo "No pending.json file"
+          fi
+
+      - name: Process with Claude API
+        if: steps.check.outputs.has_pending == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # Read pending command
+          PENDING=$(cat commands/pending.json)
+          COMMAND_ID=$(echo "$PENDING" | jq -r '.id // empty')
+          COMMAND_TEXT=$(echo "$PENDING" | jq -r '.text // empty')
+          ROUTER_CONTEXT=$(echo "$PENDING" | jq -r '.context // "RouterOS 7.x MikroTik router"')
+
+          if [ -z "$COMMAND_TEXT" ]; then
+            echo "No command text found"
+            exit 0
+          fi
+
+          echo "Processing command: $COMMAND_TEXT"
+
+          # Build the prompt
+          SYSTEM_PROMPT="You are a MikroTik RouterOS command translator. Convert natural language requests into valid RouterOS CLI commands.
+
+          Rules:
+          1. Output ONLY the RouterOS command, nothing else
+          2. Use RouterOS 7.x syntax (with forward slashes like /ip/address)
+          3. If the request is unclear, output: ERROR: <brief explanation>
+          4. For dangerous commands (reboot, reset, format), prefix with: CONFIRM: <command>
+          5. Keep commands concise and efficient
+
+          Examples:
+          - \"show interfaces\" -> /interface/print
+          - \"block IP 192.168.1.50\" -> /ip/firewall/filter/add chain=forward src-address=192.168.1.50 action=drop
+          - \"list hotspot users\" -> /ip/hotspot/active/print
+          - \"restart router\" -> CONFIRM: /system/reboot"
+
+          # Call Claude API
+          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "Content-Type: application/json" \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -d "{
+              \"model\": \"claude-3-haiku-20240307\",
+              \"max_tokens\": 500,
+              \"system\": $(echo "$SYSTEM_PROMPT" | jq -Rs .),
+              \"messages\": [
+                {
+                  \"role\": \"user\",
+                  \"content\": \"Context: $ROUTER_CONTEXT\n\nTranslate this to RouterOS command: $COMMAND_TEXT\"
+                }
+              ]
+            }")
+
+          # Extract the response text
+          TRANSLATED=$(echo "$RESPONSE" | jq -r '.content[0].text // "ERROR: API call failed"')
+
+          echo "Translated to: $TRANSLATED"
+
+          # Write response
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          jq -n \
+            --arg id "$COMMAND_ID" \
+            --arg original "$COMMAND_TEXT" \
+            --arg command "$TRANSLATED" \
+            --arg timestamp "$TIMESTAMP" \
+            --arg status "ready" \
+            '{id: $id, original: $original, command: $command, timestamp: $timestamp, status: $status}' \
+            > commands/response.json
+
+          # Clear pending
+          echo "{}" > commands/pending.json
+
+      - name: Commit response
+        if: steps.check.outputs.has_pending == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "Claude Relay Bot"
+          git add commands/response.json commands/pending.json
+          git diff --staged --quiet || git commit -m "AI: Process command and respond"
+          git push
