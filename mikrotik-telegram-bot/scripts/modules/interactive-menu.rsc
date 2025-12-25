@@ -576,6 +576,25 @@
       [$EditTelegramMessage $ChatId $MessageId $MsgText $KeyboardJson];
     }
   }
+
+  # Handle monitoring settings toggles
+  :if ($CallbackData ~ "^monitoring-settings:toggle:") do={
+    :local Toggle [:pick $CallbackData 27 [:len $CallbackData]];
+    :global MonitorCPUEnabled;
+    :global MonitorRAMEnabled;
+    :global MonitorDiskEnabled;
+    :global MonitorInterfacesEnabled;
+    :global MonitorInternetEnabled;
+
+    :if ($Toggle = "cpu") do={ :set MonitorCPUEnabled (!$MonitorCPUEnabled); }
+    :if ($Toggle = "ram") do={ :set MonitorRAMEnabled (!$MonitorRAMEnabled); }
+    :if ($Toggle = "disk") do={ :set MonitorDiskEnabled (!$MonitorDiskEnabled); }
+    :if ($Toggle = "interfaces") do={ :set MonitorInterfacesEnabled (!$MonitorInterfacesEnabled); }
+    :if ($Toggle = "internet") do={ :set MonitorInternetEnabled (!$MonitorInternetEnabled); }
+
+    # Refresh the settings menu to show updated state
+    [$ShowMonitoringSettings $ChatId $MessageId $ThreadId];
+  }
 }
 
 # ============================================================================
@@ -636,9 +655,34 @@
   }; {
     {text="🔙 Back"; callback_data="menu:main"}
   }});
-  
+
   :local KeyboardJson [$CreateInlineKeyboard $Buttons];
-  [$SendTelegramWithKeyboard $ChatId $SettingsMsg $KeyboardJson $ThreadId];
+  :global TelegramTokenId;
+  :global UrlEncode;
+  :global CertificateAvailable;
+
+  :if ([:len $MessageId] > 0 && $MessageId != "0" && $MessageId != "") do={
+    # Edit existing message
+    :local EditUrl ("https://api.telegram.org/bot" . $TelegramTokenId . "/editMessageText");
+    :local HTTPData ("chat_id=" . $ChatId . \
+      "&message_id=" . $MessageId . \
+      "&text=" . [$UrlEncode $SettingsMsg] . \
+      "&parse_mode=Markdown" . \
+      "&reply_markup=" . [$UrlEncode $KeyboardJson]);
+
+    :onerror EditErr {
+      :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
+        /tool/fetch check-certificate=no output=none http-method=post $EditUrl http-data=$HTTPData;
+      } else={
+        /tool/fetch check-certificate=yes-without-crl output=none http-method=post $EditUrl http-data=$HTTPData;
+      }
+    } do={
+      :log warning ("ShowMonitoringSettings - Failed to edit message: " . $EditErr);
+    }
+  } else={
+    # Send new message
+    [$SendTelegramWithKeyboard $ChatId $SettingsMsg $KeyboardJson $ThreadId];
+  }
 }
 
 # ============================================================================
