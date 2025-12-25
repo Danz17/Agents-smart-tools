@@ -246,6 +246,50 @@
   }
 
   # ============================================================================
+  # VERSION CHECK ON STARTUP (once per day)
+  # ============================================================================
+
+  :global LastStartupUpdateCheck;
+  :global AutoUpdateNotify;
+  :if ([:typeof $LastStartupUpdateCheck] != "time") do={
+    :set LastStartupUpdateCheck 0s;
+  }
+
+  :local CurrentTime [/system clock get time];
+  :local TimeSinceCheck ($CurrentTime - $LastStartupUpdateCheck);
+
+  # Check once per day on startup
+  :if ($TimeSinceCheck > 1d || $LastStartupUpdateCheck = 0s) do={
+    :set LastStartupUpdateCheck $CurrentTime;
+
+    # Try to load auto-updater and check
+    :onerror UpdateErr {
+      :global AutoUpdaterLoaded;
+      :if ($AutoUpdaterLoaded != true) do={
+        /system script run "modules/auto-updater";
+      }
+
+      :global CheckForUpdates;
+      :global FormatUpdateNotification;
+      :if ([:typeof $CheckForUpdates] = "array") do={
+        :local Updates [$CheckForUpdates];
+        :if (($Updates->"count") > 0 && $AutoUpdateNotify = true) do={
+          :local Msg [$FormatUpdateNotification $Updates];
+          $SendTelegram2 ({
+            chatid=$TelegramChatId;
+            silent=true;
+            subject="🔄 TxMTC Startup Check";
+            message=$Msg
+          });
+          :log info ($ScriptName . " - Found " . ($Updates->"count") . " updates available");
+        }
+      }
+    } do={
+      :log debug ($ScriptName . " - Update check skipped (module not available)");
+    }
+  }
+
+  # ============================================================================
   # RANDOM DELAY (prevent simultaneous polling)
   # ============================================================================
 
@@ -433,6 +477,62 @@
           :continue;
         }
       }
+
+    # Handle inline queries (for script search)
+    :local InlineQuery ($Update->"inline_query");
+    :if ([:typeof $InlineQuery] = "array") do={
+      :local QueryId ($InlineQuery->"id");
+      :local QueryText ($InlineQuery->"query");
+      :local QueryFrom ($InlineQuery->"from");
+      :local QueryFromId [:tostr ($QueryFrom->"id")];
+
+      # Check if user is trusted
+      :local Trusted false;
+      :if ([:typeof $IsUserTrusted] = "array") do={
+        :set Trusted [$IsUserTrusted $QueryFromId $QueryFromId];
+      } else={
+        :if ($QueryFromId = $TelegramChatId) do={
+          :set Trusted true;
+        }
+      }
+
+      :if ($Trusted = true && [:len $QueryText] >= 2) do={
+        :global SearchScripts;
+        :global AnswerInlineQuery;
+
+        :if ([:typeof $SearchScripts] = "array" && [:typeof $AnswerInlineQuery] = "array") do={
+          :local Results [$SearchScripts $QueryText];
+          :local InlineResults ({});
+
+          :foreach Script in=$Results do={
+            :local ScriptId ($Script->"id");
+            :local ScriptName ($Script->"name");
+            :local ScriptDesc ($Script->"description");
+            :if ([:len $ScriptDesc] > 100) do={
+              :set ScriptDesc ([:pick $ScriptDesc 0 97] . "...");
+            }
+
+            :set ($InlineResults->[:len $InlineResults]) ({
+              "type"="article";
+              "id"=$ScriptId;
+              "title"=$ScriptName;
+              "description"=$ScriptDesc;
+              "input_message_content"={
+                "message_text"=("/install " . $ScriptId)
+              }
+            });
+
+            # Limit to 10 results
+            :if ([:len $InlineResults] >= 10) do={
+              :set Script "";
+            }
+          }
+
+          [$AnswerInlineQuery $QueryId $InlineResults];
+        }
+      }
+      :continue;
+    }
 
     :local Message ($Update->"message");
     :if ([:typeof $Message] != "array") do={
@@ -830,6 +930,90 @@
           :set Done true;
         }
         
+        # Handle /update command
+        :if ($Done = false && $Command ~ "^/update") do={
+          :global AutoUpdaterLoaded;
+          :if ($AutoUpdaterLoaded != true) do={
+            :onerror LoadErr {
+              /system script run "modules/auto-updater";
+            } do={
+              :log warning "[bot-core] - Could not load auto-updater module";
+            }
+          }
+
+          :global CheckForUpdates;
+          :global FormatUpdateNotification;
+          :global InstallUpdate;
+          :global InstallAllUpdates;
+          :global TxMTCVersion;
+
+          :local SubCmd "";
+          :local SubArg "";
+          :if ([:len $Command] > 8) do={
+            :local Rest [:pick $Command 8 [:len $Command]];
+            :local SpacePos [:find $Rest " "];
+            :if ([:typeof $SpacePos] = "num") do={
+              :set SubCmd [:pick $Rest 0 $SpacePos];
+              :set SubArg [:pick $Rest ($SpacePos + 1) [:len $Rest]];
+            } else={
+              :set SubCmd $Rest;
+            }
+          }
+
+          :local ResponseMsg "";
+
+          :if ($SubCmd = "" || $SubCmd = "check") do={
+            # Check for updates
+            :if ([:typeof $CheckForUpdates] = "array") do={
+              :local Updates [$CheckForUpdates];
+              :set ResponseMsg [$FormatUpdateNotification $Updates];
+            } else={
+              :set ResponseMsg "Update checker not available\\.";
+            }
+          }
+
+          :if ($SubCmd = "install" && [:len $SubArg] > 0) do={
+            # Install specific update
+            :if ([:typeof $InstallUpdate] = "array") do={
+              :local Result [$InstallUpdate $SubArg];
+              :if (($Result->"success") = true) do={
+                :set ResponseMsg ("✅ Successfully updated `" . $SubArg . "`");
+              } else={
+                :set ResponseMsg ("❌ Failed to update: " . ($Result->"error"));
+              }
+            } else={
+              :set ResponseMsg "Update installer not available\\.";
+            }
+          }
+
+          :if ($SubCmd = "all") do={
+            # Install all updates
+            :if ([:typeof $InstallAllUpdates] = "array") do={
+              :local Result [$InstallAllUpdates];
+              :if (($Result->"success") = true) do={
+                :set ResponseMsg ("✅ Updated " . ($Result->"updated") . " script\\(s\\)");
+              } else={
+                :set ResponseMsg ("⚠️ Updated " . ($Result->"updated") . ", failed " . ($Result->"failed"));
+              }
+            } else={
+              :set ResponseMsg "Update installer not available\\.";
+            }
+          }
+
+          :if ($SubCmd = "version") do={
+            :if ([:typeof $TxMTCVersion] = "str") do={
+              :set ResponseMsg ("🤖 *TxMTC Version*: `" . $TxMTCVersion . "`");
+            } else={
+              :set ResponseMsg "Version information not available\\.";
+            }
+          }
+
+          :local UpdateCmds ({{"/update check"; "/update all"; "/menu"}});
+          :local UpdateButtons [$CreateCommandButtons $UpdateCmds];
+          [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $ResponseMsg $UpdateButtons $ThreadId [:tostr ($Message->"message_id")]];
+          :set Done true;
+        }
+
         # Handle /cleanup command
         :if ($Done = false && $Command = "/cleanup") do={
           :global MessageRetentionPeriod;

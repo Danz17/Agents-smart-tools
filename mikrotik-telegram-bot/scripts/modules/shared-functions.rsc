@@ -389,6 +389,58 @@
 }
 
 # ============================================================================
+# PARSE CALLBACK DATA
+# ============================================================================
+
+:global ParseCallback do={
+  :local Data [:tostr $1];
+  :local Prefix [:tostr $2];
+  :local PrefixLen [:len $Prefix];
+
+  :if ([:len $Data] < $PrefixLen) do={
+    :return "";
+  }
+
+  :if ([:pick $Data 0 $PrefixLen] = $Prefix) do={
+    :return [:pick $Data $PrefixLen [:len $Data]];
+  }
+
+  :return "";
+}
+
+# ============================================================================
+# PARSE CALLBACK WITH SEPARATOR
+# ============================================================================
+
+:global ParseCallbackParts do={
+  :local Data [:tostr $1];
+  :local Separator [:tostr $2];
+
+  :if ([:len $Separator] = 0) do={
+    :set Separator ":";
+  }
+
+  :local Parts ({});
+  :local Current "";
+
+  :for I from=0 to=([:len $Data] - 1) do={
+    :local Char [:pick $Data $I ($I + 1)];
+    :if ($Char = $Separator) do={
+      :set ($Parts->[:len $Parts]) $Current;
+      :set Current "";
+    } else={
+      :set Current ($Current . $Char);
+    }
+  }
+
+  :if ([:len $Current] > 0) do={
+    :set ($Parts->[:len $Parts]) $Current;
+  }
+
+  :return $Parts;
+}
+
+# ============================================================================
 # INITIALIZATION FLAG
 # ============================================================================
 

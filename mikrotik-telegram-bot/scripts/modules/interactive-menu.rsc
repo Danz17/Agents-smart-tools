@@ -78,7 +78,7 @@
   :global CertificateAvailable;
   
   :local SendUrl ("https://api.telegram.org/bot" . $TelegramTokenId . "/sendMessage");
-  :local SendData ("chat_id=" . $ChatId . "&text=" . [$UrlEncode $MessageText] . "&parse_mode=MarkdownV2" . "&reply_markup=" . [$UrlEncode $KeyboardJSON]);
+  :local SendData ("chat_id=" . $ChatId . "&text=" . [$UrlEncode $MessageText] . "&parse_mode=Markdown" . "&reply_markup=" . [$UrlEncode $KeyboardJSON]);
   
   :if ([:len $ThreadId] > 0 && $ThreadId != "0") do={
     :set SendData ($SendData . "&message_thread_id=" . $ThreadId);
@@ -251,20 +251,30 @@
 # ============================================================================
 
 :global ShowCategoryMenu do={
-  :local ChatId [ :tostr $1 ];
-  :local MessageId [ :tostr $2 ];
-  :local ThreadId [ :tostr $3 ];
-  :local Category [ :tostr $4 ];
-  
+  :local ChatId [:tostr $1];
+  :local MessageId [:tostr $2];
+  :local ThreadId [:tostr $3];
+  :local Category [:tostr $4];
+  :local Page [:tonum $5];
+
+  # Default to page 1
+  :if ($Page < 1) do={ :set Page 1; }
+
+  :local ItemsPerPage 8;
   :local Scripts [$ListScriptsByCategory $Category];
+  :local TotalScripts [:len $Scripts];
+  :local TotalPages (($TotalScripts + $ItemsPerPage - 1) / $ItemsPerPage);
+  :if ($TotalPages < 1) do={ :set TotalPages 1; }
+  :if ($Page > $TotalPages) do={ :set Page $TotalPages; }
+
   :local Buttons ({});
-  
-  :if ([:len $Scripts] = 0) do={
+
+  :if ($TotalScripts = 0) do={
     :local NoScriptsText ("*" . $Category . " Scripts*\n\nNo scripts available in this category.");
     :set ($Buttons->[:len $Buttons]) ({
       {text="🔙 Back"; callback_data="menu:main"}
     });
-    
+
     :local KeyboardJSON [$CreateInlineKeyboard $Buttons];
     :global TelegramTokenId;
     :local EditUrl ("https://api.telegram.org/bot" . $TelegramTokenId . "/editMessageText");
@@ -273,38 +283,71 @@
       "&text=" . [$UrlEncode $NoScriptsText] . \
       "&parse_mode=Markdown" . \
       "&reply_markup=" . [$UrlEncode $KeyboardJSON]);
-    
-    :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
-      /tool/fetch check-certificate=no output=none http-method=post $EditUrl http-data=$HTTPData;
-    } else={
-      /tool/fetch check-certificate=yes-without-crl output=none http-method=post $EditUrl http-data=$HTTPData;
-    }
+
+    :onerror Err {
+      :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
+        /tool/fetch check-certificate=no output=none http-method=post $EditUrl http-data=$HTTPData;
+      } else={
+        /tool/fetch check-certificate=yes-without-crl output=none http-method=post $EditUrl http-data=$HTTPData;
+      }
+    } do={}
     :return;
   }
-  
+
+  # Calculate pagination range
+  :local StartIdx (($Page - 1) * $ItemsPerPage);
+  :local EndIdx ($StartIdx + $ItemsPerPage);
+  :if ($EndIdx > $TotalScripts) do={ :set EndIdx $TotalScripts; }
+
   # Script buttons (1 per row for better readability)
+  :local Idx 0;
   :foreach ScriptId,ScriptData in=$Scripts do={
-    :local ScriptName ($ScriptData->"name");
-    :local IsInstalled false;
-    :if ([:len [/system script find where name=$ScriptName]] > 0) do={
-      :set IsInstalled true;
+    :if ($Idx >= $StartIdx && $Idx < $EndIdx) do={
+      :local ScriptName ($ScriptData->"name");
+      :local IsInstalled false;
+      :if ([:len [/system script find where name=$ScriptName]] > 0) do={
+        :set IsInstalled true;
+      }
+
+      :local ButtonText $ScriptName;
+      :if ($IsInstalled = true) do={
+        :set ButtonText ($ButtonText . " ✓");
+      }
+
+      :set ($Buttons->[:len $Buttons]) ({
+        {text=$ButtonText; callback_data=("script:" . $ScriptId)}
+      });
     }
-    
-    :local ButtonText $ScriptName;
-    :if ($IsInstalled = true) do={
-      :set ButtonText ($ButtonText . " ✓");
-    }
-    
-    :set ($Buttons->[:len $Buttons]) ({
-      {text=$ButtonText; callback_data=("script:" . $ScriptId)}
-    });
+    :set Idx ($Idx + 1);
   }
-  
+
+  # Pagination buttons (if needed)
+  :if ($TotalPages > 1) do={
+    :local PageButtons ({});
+    :if ($Page > 1) do={
+      :set ($PageButtons->[:len $PageButtons]) {
+        text="◀️ Prev";
+        callback_data=("catpage:" . $Category . ":" . ($Page - 1))
+      };
+    }
+    :set ($PageButtons->[:len $PageButtons]) {
+      text=([:tostr $Page] . "/" . [:tostr $TotalPages]);
+      callback_data="noop"
+    };
+    :if ($Page < $TotalPages) do={
+      :set ($PageButtons->[:len $PageButtons]) {
+        text="Next ▶️";
+        callback_data=("catpage:" . $Category . ":" . ($Page + 1))
+      };
+    }
+    :set ($Buttons->[:len $Buttons]) $PageButtons;
+  }
+
   # Navigation buttons
   :set ($Buttons->[:len $Buttons]) ({
     {text="🔙 Back"; callback_data="menu:main"}
   });
-  
+
   :local CategoryName $Category;
   # Use display names for categories
   :if ($Category = "monitoring") do={ :set CategoryName "Monitoring"; }
@@ -314,7 +357,7 @@
   :if ($Category = "network-management") do={ :set CategoryName "Network Management"; }
   :if ($Category = "misc") do={ :set CategoryName "Misc"; }
   :local MenuText ("*" . $CategoryName . " Scripts*\n\nSelect a script:");
-  
+
   :local KeyboardJSON [$CreateInlineKeyboard $Buttons];
   :global TelegramTokenId;
   :local EditUrl ("https://api.telegram.org/bot" . $TelegramTokenId . "/editMessageText");
@@ -323,12 +366,14 @@
     "&text=" . [$UrlEncode $MenuText] . \
     "&parse_mode=Markdown" . \
     "&reply_markup=" . [$UrlEncode $KeyboardJSON]);
-  
-  :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
-    /tool/fetch check-certificate=no output=none http-method=post $EditUrl http-data=$HTTPData;
-  } else={
-    /tool/fetch check-certificate=yes-without-crl output=none http-method=post $EditUrl http-data=$HTTPData;
-  }
+
+  :onerror Err {
+    :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
+      /tool/fetch check-certificate=no output=none http-method=post $EditUrl http-data=$HTTPData;
+    } else={
+      /tool/fetch check-certificate=yes-without-crl output=none http-method=post $EditUrl http-data=$HTTPData;
+    }
+  } do={}
 }
 
 # ============================================================================
@@ -442,23 +487,78 @@
       }
     }
     :if ($Action = "settings") do={
-      # Will be handled by user-settings module
-      $SendTelegram2 ({
-        chatid=$ChatId;
-        threadid=$ThreadId;
-        silent=true;
-        subject="⚡ TxMTC | Settings";
-        message="Settings menu coming soon..."
-      });
+      :global ShowUserSettings;
+      [$ShowUserSettings $ChatId $MessageId $ThreadId];
     }
     :if ($Action = "error-monitor") do={
       [$ShowErrorMonitorSettings $ChatId $MessageId $ThreadId];
+    }
+    :if ($Action = "install") do={
+      :global ShowInstallerMainMenu;
+      :if ([:typeof $ShowInstallerMainMenu] = "nothing") do={
+        :onerror LoadErr {
+          /system script run "modules/interactive-installer";
+        } do={
+          :log warning ("interactive-menu - Could not load installer module");
+        }
+      }
+      :if ([:typeof $ShowInstallerMainMenu] != "nothing") do={
+        [$ShowInstallerMainMenu $ChatId $MessageId $ThreadId];
+      } else={
+        $SendTelegram2 ({
+          chatid=$ChatId;
+          threadid=$ThreadId;
+          silent=true;
+          subject="⚡ TxMTC | Install";
+          message="❌ Installer module not available"
+        });
+      }
+    }
+    :if ($Action = "search") do={
+      :local SearchMsg "*🔍 Search Scripts*\n\n";
+      :set SearchMsg ($SearchMsg . "Use inline mode to search:\n\n");
+      :set SearchMsg ($SearchMsg . "Type `@YourBotName query` in any chat\n\n");
+      :set SearchMsg ($SearchMsg . "_Example: @TxMTC\\_bot backup_");
+
+      :local Buttons ({{
+        {text="🔙 Back"; callback_data="menu:main"}
+      }});
+      :local KeyboardJson [$CreateInlineKeyboard $Buttons];
+
+      :local EditUrl ("https://api.telegram.org/bot" . $TelegramTokenId . "/editMessageText");
+      :local HTTPData ("chat_id=" . $ChatId . \
+        "&message_id=" . $MessageId . \
+        "&text=" . [$UrlEncode $SearchMsg] . \
+        "&parse_mode=Markdown" . \
+        "&reply_markup=" . [$UrlEncode $KeyboardJson]);
+
+      :onerror EditErr {
+        :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
+          /tool/fetch check-certificate=no output=none http-method=post $EditUrl http-data=$HTTPData;
+        } else={
+          /tool/fetch check-certificate=yes-without-crl output=none http-method=post $EditUrl http-data=$HTTPData;
+        }
+      } do={
+        :log warning ("interactive-menu - Failed to show search hint: " . $EditErr);
+      }
     }
   }
   
   :if ($CallbackData ~ "^cat:") do={
     :local Category [:pick $CallbackData 4 [:len $CallbackData]];
-    [$ShowCategoryMenu $ChatId $MessageId $ThreadId $Category];
+    [$ShowCategoryMenu $ChatId $MessageId $ThreadId $Category 1];
+  }
+
+  # Handle category pagination
+  :if ($CallbackData ~ "^catpage:") do={
+    :global ParseCallbackParts;
+    :local Parts [$ParseCallbackParts $CallbackData ":"];
+    # Parts: catpage, category, page
+    :if ([:len $Parts] >= 3) do={
+      :local Category ($Parts->1);
+      :local Page [:tonum ($Parts->2)];
+      [$ShowCategoryMenu $ChatId $MessageId $ThreadId $Category $Page];
+    }
   }
   
   :if ($CallbackData ~ "^script:") do={
@@ -633,6 +733,24 @@
     # Refresh the error monitor menu
     [$ShowErrorMonitorSettings $ChatId $MessageId $ThreadId];
   }
+
+  # Handle user settings toggles
+  :if ($CallbackData ~ "^settings:toggle:") do={
+    :local Toggle [:pick $CallbackData 16 [:len $CallbackData]];
+    :global NotificationSilent;
+    :global SendDailySummary;
+    :global AutoCleanupEnabled;
+    :global EnableAutoMonitoring;
+    :global ShowUserSettings;
+
+    :if ($Toggle = "notifications") do={ :set NotificationSilent (!$NotificationSilent); }
+    :if ($Toggle = "summary") do={ :set SendDailySummary (!$SendDailySummary); }
+    :if ($Toggle = "cleanup") do={ :set AutoCleanupEnabled (!$AutoCleanupEnabled); }
+    :if ($Toggle = "monitoring") do={ :set EnableAutoMonitoring (!$EnableAutoMonitoring); }
+
+    # Refresh the settings menu
+    [$ShowUserSettings $ChatId $MessageId $ThreadId];
+  }
 }
 
 # ============================================================================
@@ -803,6 +921,76 @@
       }
     } do={
       :log warning ("ShowErrorMonitorSettings - Failed to edit: " . $EditErr);
+    }
+  } else={
+    [$SendTelegramWithKeyboard $ChatId $SettingsMsg $KeyboardJson $ThreadId];
+  }
+}
+
+# ============================================================================
+# SHOW USER SETTINGS MENU
+# ============================================================================
+
+:global ShowUserSettings do={
+  :local ChatId [:tostr $1];
+  :local MessageId [:tostr $2];
+  :local ThreadId [:tostr $3];
+
+  :global NotificationSilent;
+  :global SendDailySummary;
+  :global AutoCleanupEnabled;
+  :global EnableAutoMonitoring;
+  :global TelegramTokenId;
+  :global UrlEncode;
+  :global CertificateAvailable;
+  :global CreateInlineKeyboard;
+  :global SendTelegramWithKeyboard;
+
+  # Initialize defaults if not set
+  :if ([:typeof $NotificationSilent] != "bool") do={ :set NotificationSilent false; }
+  :if ([:typeof $SendDailySummary] != "bool") do={ :set SendDailySummary true; }
+  :if ([:typeof $AutoCleanupEnabled] != "bool") do={ :set AutoCleanupEnabled true; }
+  :if ([:typeof $EnableAutoMonitoring] != "bool") do={ :set EnableAutoMonitoring true; }
+
+  :local icons {false="❌"; true="✅"};
+
+  :local SettingsMsg ("⚙️ *User Settings*\n\n");
+  :set SettingsMsg ($SettingsMsg . "*Notifications:*\n");
+  :set SettingsMsg ($SettingsMsg . ($icons->[:tostr (!$NotificationSilent)]) . " Sound alerts\n");
+  :set SettingsMsg ($SettingsMsg . ($icons->[:tostr $SendDailySummary]) . " Daily summary\n\n");
+  :set SettingsMsg ($SettingsMsg . "*Automation:*\n");
+  :set SettingsMsg ($SettingsMsg . ($icons->[:tostr $AutoCleanupEnabled]) . " Auto cleanup\n");
+  :set SettingsMsg ($SettingsMsg . ($icons->[:tostr $EnableAutoMonitoring]) . " Auto monitoring\n\n");
+  :set SettingsMsg ($SettingsMsg . "_Tap buttons below to toggle settings._");
+
+  :local Buttons ({{
+    {text="🔔 Notifications"; callback_data="settings:toggle:notifications"};
+    {text="📊 Daily Summary"; callback_data="settings:toggle:summary"}
+  }; {
+    {text="🧹 Auto Cleanup"; callback_data="settings:toggle:cleanup"};
+    {text="📈 Auto Monitor"; callback_data="settings:toggle:monitoring"}
+  }; {
+    {text="🔙 Back"; callback_data="menu:main"}
+  }});
+
+  :local KeyboardJson [$CreateInlineKeyboard $Buttons];
+
+  :if ([:len $MessageId] > 0 && $MessageId != "0" && $MessageId != "") do={
+    :local EditUrl ("https://api.telegram.org/bot" . $TelegramTokenId . "/editMessageText");
+    :local HTTPData ("chat_id=" . $ChatId . \
+      "&message_id=" . $MessageId . \
+      "&text=" . [$UrlEncode $SettingsMsg] . \
+      "&parse_mode=Markdown" . \
+      "&reply_markup=" . [$UrlEncode $KeyboardJson]);
+
+    :onerror EditErr {
+      :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
+        /tool/fetch check-certificate=no output=none http-method=post $EditUrl http-data=$HTTPData;
+      } else={
+        /tool/fetch check-certificate=yes-without-crl output=none http-method=post $EditUrl http-data=$HTTPData;
+      }
+    } do={
+      :log warning ("ShowUserSettings - Failed to edit: " . $EditErr);
     }
   } else={
     [$SendTelegramWithKeyboard $ChatId $SettingsMsg $KeyboardJson $ThreadId];

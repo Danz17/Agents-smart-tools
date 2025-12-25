@@ -694,6 +694,56 @@
 }
 
 # ============================================================================
+# ANSWER INLINE QUERY
+# ============================================================================
+
+:global AnswerInlineQuery do={
+  :local QueryId [:tostr $1];
+  :local Results $2;
+
+  :global TelegramTokenId;
+  :global UrlEncode;
+  :global CertificateAvailable;
+
+  :local APIUrl ("https://api.telegram.org/bot" . $TelegramTokenId . "/answerInlineQuery");
+
+  # Build results JSON
+  :local ResultsJson "[";
+  :local IsFirst true;
+  :foreach Result in=$Results do={
+    :if ($IsFirst = false) do={
+      :set ResultsJson ($ResultsJson . ",");
+    }
+    :set IsFirst false;
+
+    :local ItemJson "{";
+    :set ItemJson ($ItemJson . "\"type\":\"article\",");
+    :set ItemJson ($ItemJson . "\"id\":\"" . ($Result->"id") . "\",");
+    :set ItemJson ($ItemJson . "\"title\":\"" . ($Result->"title") . "\",");
+    :set ItemJson ($ItemJson . "\"description\":\"" . ($Result->"description") . "\",");
+    :set ItemJson ($ItemJson . "\"input_message_content\":{");
+    :set ItemJson ($ItemJson . "\"message_text\":\"" . (($Result->"input_message_content")->"message_text") . "\"");
+    :set ItemJson ($ItemJson . "}}");
+
+    :set ResultsJson ($ResultsJson . $ItemJson);
+  }
+  :set ResultsJson ($ResultsJson . "]");
+
+  :local HTTPData ("inline_query_id=" . $QueryId . "&results=" . [$UrlEncode $ResultsJson] . "&cache_time=60");
+
+  :onerror Err {
+    :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
+      /tool/fetch check-certificate=no output=none http-method=post $APIUrl http-data=$HTTPData;
+    } else={
+      /tool/fetch check-certificate=yes-without-crl output=none http-method=post $APIUrl http-data=$HTTPData;
+    }
+    :log debug ("telegram-api - Answered inline query: " . $QueryId);
+  } do={
+    :log warning ("telegram-api - AnswerInlineQuery failed: " . $Err);
+  }
+}
+
+# ============================================================================
 # INITIALIZATION FLAG
 # ============================================================================
 
