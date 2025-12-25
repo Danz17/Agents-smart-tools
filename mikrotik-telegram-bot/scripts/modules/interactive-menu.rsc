@@ -535,7 +535,6 @@
   # Handle uninstall confirmation (execute uninstall)
   :if ($CallbackData ~ "^uninstall-confirm:") do={
     :local ScriptId [:pick $CallbackData 18 [:len $CallbackData]];
-    :local ScriptId [:pick $CallbackData 10 [:len $CallbackData]];
     :global UninstallScript;
     :local Result [$UninstallScript $ScriptId];
     :if (($Result->"success") = true) do={
