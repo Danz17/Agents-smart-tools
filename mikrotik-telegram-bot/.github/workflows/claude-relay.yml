@@ -1,4 +1,4 @@
-name: Claude AI Relay
+name: AI Command Relay (Free - Groq)
 
 on:
   push:
@@ -39,10 +39,22 @@ jobs:
             echo "No pending.json file"
           fi
 
-      - name: Process with Claude API
+      - name: Load RouterOS Knowledge Base
+        if: steps.check.outputs.has_pending == 'true'
+        id: kb
+        run: |
+          # Load the knowledge base from file
+          if [ -f "commands/routeros-kb.md" ]; then
+            KB=$(cat commands/routeros-kb.md | jq -Rs .)
+            echo "kb=$KB" >> $GITHUB_OUTPUT
+          else
+            echo "kb=\"RouterOS 7.x command reference\"" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Process with Groq API (Free)
         if: steps.check.outputs.has_pending == 'true'
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
           # Read pending command
           PENDING=$(cat commands/pending.json)
@@ -57,41 +69,165 @@ jobs:
 
           echo "Processing command: $COMMAND_TEXT"
 
-          # Build the prompt
-          SYSTEM_PROMPT="You are a MikroTik RouterOS command translator. Convert natural language requests into valid RouterOS CLI commands.
+          # Load knowledge base
+          KB=""
+          if [ -f "commands/routeros-kb.md" ]; then
+            KB=$(cat commands/routeros-kb.md)
+          fi
 
-          Rules:
-          1. Output ONLY the RouterOS command, nothing else
-          2. Use RouterOS 7.x syntax (with forward slashes like /ip/address)
-          3. If the request is unclear, output: ERROR: <brief explanation>
-          4. For dangerous commands (reboot, reset, format), prefix with: CONFIRM: <command>
-          5. Keep commands concise and efficient
+          # Build the comprehensive system prompt
+          read -r -d '' SYSTEM_PROMPT << 'SYSPROMPT'
+You are TxMTC-AI, an expert MikroTik RouterOS command translator. Your job is to convert natural language requests into precise RouterOS CLI commands.
 
-          Examples:
-          - \"show interfaces\" -> /interface/print
-          - \"block IP 192.168.1.50\" -> /ip/firewall/filter/add chain=forward src-address=192.168.1.50 action=drop
-          - \"list hotspot users\" -> /ip/hotspot/active/print
-          - \"restart router\" -> CONFIRM: /system/reboot"
+## RouterOS 7.x Command Reference
 
-          # Call Claude API
-          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+### System Commands
+/system/identity/print - Show router name
+/system/resource/print - Show CPU, RAM, uptime
+/system/routerboard/print - Show hardware info
+/system/package/print - List installed packages
+/system/reboot - Reboot router (DANGEROUS)
+/system/shutdown - Shutdown router (DANGEROUS)
+/system/backup/save name=backup - Create backup
+/system/clock/print - Show date/time
+
+### Interface Commands
+/interface/print - List all interfaces
+/interface/print stats - Interface statistics
+/interface/enable [find name=ether1] - Enable interface
+/interface/disable [find name=ether1] - Disable interface
+/interface/ethernet/print - Ethernet interfaces
+/interface/bridge/print - Bridge interfaces
+/interface/vlan/print - VLAN interfaces
+/interface/wireless/print - WiFi interfaces (if available)
+
+### IP Commands
+/ip/address/print - Show IP addresses
+/ip/address/add address=192.168.1.1/24 interface=ether1 - Add IP
+/ip/route/print - Show routing table
+/ip/route/add dst-address=0.0.0.0/0 gateway=192.168.1.1 - Add default route
+/ip/dns/print - Show DNS settings
+/ip/dns/set servers=8.8.8.8,8.8.4.4 - Set DNS
+/ip/dhcp-server/print - DHCP servers
+/ip/dhcp-server/lease/print - DHCP leases
+/ip/pool/print - IP pools
+/ip/arp/print - ARP table
+/ip/neighbor/print - Neighbor discovery
+
+### Firewall Commands
+/ip/firewall/filter/print - Show filter rules
+/ip/firewall/filter/add chain=forward src-address=X.X.X.X action=drop - Block IP
+/ip/firewall/filter/add chain=input protocol=tcp dst-port=22 action=accept - Allow SSH
+/ip/firewall/nat/print - NAT rules
+/ip/firewall/nat/add chain=srcnat out-interface=ether1 action=masquerade - Masquerade
+/ip/firewall/address-list/print - Address lists
+/ip/firewall/address-list/add list=blocked address=X.X.X.X - Add to blocklist
+/ip/firewall/connection/print - Active connections
+
+### Hotspot Commands
+/ip/hotspot/print - Hotspot servers
+/ip/hotspot/active/print - Active hotspot users
+/ip/hotspot/user/print - Hotspot user accounts
+/ip/hotspot/user/add name=user password=pass - Add hotspot user
+/ip/hotspot/host/print - Hotspot hosts
+/ip/hotspot/ip-binding/print - IP bindings
+/ip/hotspot/ip-binding/add mac-address=XX:XX:XX:XX:XX:XX type=bypassed - Bypass MAC
+
+### Queue/Bandwidth Commands
+/queue/simple/print - Simple queues
+/queue/simple/add name=limit1 target=192.168.1.100 max-limit=10M/10M - Limit bandwidth
+/queue/tree/print - Queue trees
+
+### Wireless Commands
+/interface/wireless/print - Wireless interfaces
+/interface/wireless/registration-table/print - Connected clients
+/interface/wireless/security-profiles/print - Security profiles
+/interface/wifiwave2/print - WiFi Wave2 (newer routers)
+
+### VPN Commands
+/interface/wireguard/print - WireGuard interfaces
+/interface/wireguard/peers/print - WireGuard peers
+/interface/l2tp-server/print - L2TP server
+/interface/pptp-server/print - PPTP server
+/interface/ovpn-server/print - OpenVPN server
+/ppp/secret/print - PPP users
+
+### User Management
+/user/print - System users
+/user/add name=admin password=secret group=full - Add user
+/user/active/print - Active sessions
+
+### Log Commands
+/log/print - Show logs
+/log/print where topics~"error" - Error logs
+/log/print where topics~"warning" - Warnings
+
+### Tools
+/tool/ping address=8.8.8.8 count=4 - Ping
+/tool/traceroute address=8.8.8.8 - Traceroute
+/tool/bandwidth-test address=X.X.X.X - Bandwidth test
+/tool/torch interface=ether1 - Traffic monitor
+/tool/netwatch/print - Netwatch entries
+/tool/fetch url=http://example.com - HTTP fetch
+
+### Certificate Commands
+/certificate/print - List certificates
+/certificate/print where expires-after<30d - Expiring soon
+
+## Translation Rules
+
+1. Output ONLY the RouterOS command - no explanations
+2. Use RouterOS 7.x syntax with forward slashes: /ip/address/print
+3. For queries about "users" in hotspot context -> /ip/hotspot/active/print
+4. For "connected users" or "clients" on wireless -> /interface/wireless/registration-table/print
+5. For blocking: use /ip/firewall/filter/add or /ip/firewall/address-list/add
+6. For finding specific items, use: [find name=X] or where clauses
+7. If command is dangerous (reboot, reset, shutdown, remove all), prefix with: CONFIRM:
+8. If request is unclear or impossible, output: ERROR: <brief reason>
+9. For "show" or "list" requests, use /print
+10. For statistics, add "stats" or use specific counters
+
+## Examples
+- "show interfaces" -> /interface/print
+- "list hotspot users" -> /ip/hotspot/active/print
+- "block IP 192.168.1.50" -> /ip/firewall/filter/add chain=forward src-address=192.168.1.50 action=drop comment="Blocked by TxMTC"
+- "show connected wifi clients" -> /interface/wireless/registration-table/print
+- "add user john with password secret123" -> /ip/hotspot/user/add name=john password=secret123
+- "show firewall rules" -> /ip/firewall/filter/print
+- "reboot router" -> CONFIRM: /system/reboot
+- "limit 192.168.1.100 to 5mbps" -> /queue/simple/add name=limit-100 target=192.168.1.100 max-limit=5M/5M
+- "show CPU usage" -> /system/resource/print
+- "what is router name" -> /system/identity/print
+- "enable ether2" -> /interface/enable [find name=ether2]
+- "show DHCP leases" -> /ip/dhcp-server/lease/print
+- "add IP 10.0.0.1/24 to bridge1" -> /ip/address/add address=10.0.0.1/24 interface=bridge1
+SYSPROMPT
+
+          # Call Groq API (FREE!)
+          RESPONSE=$(curl -s https://api.groq.com/openai/v1/chat/completions \
             -H "Content-Type: application/json" \
-            -H "x-api-key: $ANTHROPIC_API_KEY" \
-            -H "anthropic-version: 2023-06-01" \
+            -H "Authorization: Bearer $GROQ_API_KEY" \
             -d "{
-              \"model\": \"claude-3-haiku-20240307\",
-              \"max_tokens\": 500,
-              \"system\": $(echo "$SYSTEM_PROMPT" | jq -Rs .),
+              \"model\": \"llama-3.1-70b-versatile\",
               \"messages\": [
                 {
+                  \"role\": \"system\",
+                  \"content\": $(echo "$SYSTEM_PROMPT" | jq -Rs .)
+                },
+                {
                   \"role\": \"user\",
-                  \"content\": \"Context: $ROUTER_CONTEXT\n\nTranslate this to RouterOS command: $COMMAND_TEXT\"
+                  \"content\": \"Context: $ROUTER_CONTEXT\n\nTranslate to RouterOS command: $COMMAND_TEXT\"
                 }
-              ]
+              ],
+              \"temperature\": 0.1,
+              \"max_tokens\": 500
             }")
 
           # Extract the response text
-          TRANSLATED=$(echo "$RESPONSE" | jq -r '.content[0].text // "ERROR: API call failed"')
+          TRANSLATED=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // "ERROR: API call failed"')
+
+          # Clean up response (remove markdown code blocks if present)
+          TRANSLATED=$(echo "$TRANSLATED" | sed 's/```routeros//g' | sed 's/```//g' | tr -d '\n' | xargs)
 
           echo "Translated to: $TRANSLATED"
 
@@ -103,7 +239,8 @@ jobs:
             --arg command "$TRANSLATED" \
             --arg timestamp "$TIMESTAMP" \
             --arg status "ready" \
-            '{id: $id, original: $original, command: $command, timestamp: $timestamp, status: $status}' \
+            --arg model "llama-3.1-70b (free)" \
+            '{id: $id, original: $original, command: $command, timestamp: $timestamp, status: $status, model: $model}' \
             > commands/response.json
 
           # Clear pending
@@ -113,7 +250,7 @@ jobs:
         if: steps.check.outputs.has_pending == 'true'
         run: |
           git config --local user.email "action@github.com"
-          git config --local user.name "Claude Relay Bot"
+          git config --local user.name "TxMTC AI Relay"
           git add commands/response.json commands/pending.json
-          git diff --staged --quiet || git commit -m "AI: Process command and respond"
+          git diff --staged --quiet || git commit -m "AI: Translate command (Llama 3.1 70B - Free)"
           git push
