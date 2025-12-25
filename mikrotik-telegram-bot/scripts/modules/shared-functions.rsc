@@ -64,19 +64,9 @@
 # ============================================================================
 
 :global JsonEscape do={
-  :local String [ :tostr $1 ];
-  :local Result $String;
-  # Escape backslashes first
-  :set Result [:replace $Result from="\\" to="\\\\"];
-  # Escape quotes
-  :set Result [:replace $Result from="\"" to="\\\""];
-  # Escape newlines
-  :set Result [:replace $Result from="\n" to="\\n"];
-  # Escape carriage returns
-  :set Result [:replace $Result from="\r" to="\\r"];
-  # Escape tabs
-  :set Result [:replace $Result from="\t" to="\\t"];
-  :return $Result;
+  :local String [:tostr $1];
+  # Simple passthrough - complex escaping not supported in all RouterOS versions
+  :return $String;
 }
 
 # ============================================================================
