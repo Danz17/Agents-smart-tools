@@ -18,14 +18,28 @@
 :global UrlEncode do={
   :local String [ :tostr $1 ];
   :local Result "";
+
+  # Character to hex mapping for URL encoding
+  :local EncodeMap ({
+    " "="%20"; "!"="%21"; "\""="%22"; "#"="%23"; "\$"="%24";
+    "%"="%25"; "&"="%26"; "'"="%27"; "("="%28"; ")"="%29";
+    "*"="%2A"; "+"="%2B"; ","="%2C"; "/"="%2F"; ":"="%3A";
+    ";"="%3B"; "<"="%3C"; "="="%3D"; ">"="%3E"; "?"="%3F";
+    "@"="%40"; "["="%5B"; "\\"="%5C"; "]"="%5D"; "^"="%5E";
+    "`"="%60"; "{"="%7B"; "|"="%7C"; "}"="%7D";
+    "\n"="%0A"; "\r"="%0D"; "\t"="%09"
+  });
+
   :for I from=0 to=([:len $String] - 1) do={
     :local Char [:pick $String $I ($I + 1)];
     :if ($Char ~ "[A-Za-z0-9_.~-]") do={
       :set Result ($Result . $Char);
     } else={
-      :if ($Char = " ") do={
-        :set Result ($Result . "%20");
+      :local Encoded ($EncodeMap->$Char);
+      :if ([:typeof $Encoded] = "str") do={
+        :set Result ($Result . $Encoded);
       } else={
+        # Pass through unknown chars (emojis, UTF-8, etc.)
         :set Result ($Result . $Char);
       }
     }
