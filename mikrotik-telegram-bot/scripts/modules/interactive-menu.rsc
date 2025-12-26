@@ -46,21 +46,33 @@
 
 :global CreateInlineKeyboard do={
   :local Buttons $1;
-  :local Keyboard ({});
-  
+
+  # Build JSON manually (RouterOS :serialize has bugs with nested arrays)
+  :local Json "{\"inline_keyboard\":[";
+  :local IsFirstRow true;
+  # Key names as variables (RouterOS bug: -> accessor fails with underscore keys)
+  :local KeyText "text";
+  :local KeyData "callback_data";
+
   :foreach Row in=$Buttons do={
-    :local KeyboardRow ({});
+    :if ($IsFirstRow = false) do={ :set Json ($Json . ","); }
+    :set IsFirstRow false;
+    :set Json ($Json . "[");
+
+    :local IsFirstBtn true;
     :foreach Button in=$Row do={
-      :local ButtonData ({
-        text=($Button->"text");
-        callback_data=($Button->"callback_data")
-      });
-      :set ($KeyboardRow->[:len $KeyboardRow]) $ButtonData;
+      :if ($IsFirstBtn = false) do={ :set Json ($Json . ","); }
+      :set IsFirstBtn false;
+
+      :local BtnText ($Button->$KeyText);
+      :local BtnData ($Button->$KeyData);
+      :set Json ($Json . "{\"text\":\"" . $BtnText . "\",\"callback_data\":\"" . $BtnData . "\"}");
     }
-    :set ($Keyboard->[:len $Keyboard]) $KeyboardRow;
+    :set Json ($Json . "]");
   }
-  
-  :return [ :serialize to=json value=({inline_keyboard=$Keyboard}) ];
+
+  :set Json ($Json . "]}");
+  :return $Json;
 }
 
 # ============================================================================
