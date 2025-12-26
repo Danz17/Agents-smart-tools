@@ -377,6 +377,7 @@
   :foreach Update in=$Results do={
     :set UpdateID ($Update->"update_id");
     :log debug ($ScriptName . " - Processing update " . $UpdateID);
+    :local Processed false;
 
       # Handle callback queries (inline keyboard button presses)
       :local CallbackQuery ($Update->"callback_query");
@@ -436,7 +437,7 @@
               } do={
                 :log warning ($ScriptName . " - Failed to run monitoring: " . $MonErr);
               }
-              :continue;
+              :set Processed true;
             }
             
             :if ($CallbackData = "monitoring:devices") do={
@@ -452,7 +453,7 @@
               } else={
                 $SendTelegram2 ({ chatid=$CallbackChatId; silent=false; subject="📱 Connected Devices"; message="Connected devices function not available."; threadid=$ThreadId });
               }
-              :continue;
+              :set Processed true;
             }
             
             :if ($CallbackData = "monitoring:command") do={
@@ -464,17 +465,17 @@
               $SendTelegram2 ({ chatid=$CallbackChatId; silent=false; subject="⚙️ RouterOS Command"; \
                 message=("Type your RouterOS command now\\.\n\nExample:\n`/interface print`\n`/ip dhcp-server lease print`\n\nOr activate device first:\n`! " . $Identity . "`\n\nThen send your command\\."); \
                 threadid=$ThreadId });
-              :continue;
+              :set Processed true;
             }
             
             # Handle other callbacks via interactive menu
-            :if ([:typeof $HandleCallbackQuery] = "array") do={
+            :if ($Processed = false && [:typeof $HandleCallbackQuery] = "array") do={
               [$HandleCallbackQuery $CallbackData $CallbackChatId [:tostr $CallbackMsgId] $ThreadId [:tostr $CallbackId]];
+              :set Processed true;
             }
-            :continue;
           }
         } else={
-          :continue;
+          :set Processed true;
         }
       }
 
@@ -531,14 +532,13 @@
           [$AnswerInlineQuery $QueryId $InlineResults];
         }
       }
-      :continue;
+      :set Processed true;
     }
 
+    :if ($Processed = false) do={
     :local Message ($Update->"message");
-    :if ([:typeof $Message] != "array") do={
-      :continue;
-    }
-    
+    :if ([:typeof $Message] = "array") do={
+
     :local IsAnyReply ([:typeof ($Message->"reply_to_message")] = "array");
     :local IsMyReply false;
     :if ($IsAnyReply = true) do={
@@ -1965,6 +1965,8 @@
           :log info ($ScriptName . " - " . $MessageText);
         }
       }
+    }
+    }
     } else={
       :log debug ($ScriptName . " - Skipped update " . $UpdateID);
     }
