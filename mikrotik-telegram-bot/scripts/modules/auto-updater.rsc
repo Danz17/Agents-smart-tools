@@ -73,6 +73,140 @@
 # Current version of the bot system
 :global TxMTCVersion "2.1.0";
 
+# GitHub raw base URL for direct file fetching
+:global GitHubRawBase "https://raw.githubusercontent.com/Danz17/Agents-smart-tools/main/mikrotik-telegram-bot";
+
+# ============================================================================
+# GITHUB MODULE LIST (modules to sync from GitHub)
+# ============================================================================
+
+:global GitHubModules ({
+  "interactive-menu"="scripts/modules/interactive-menu.rsc";
+  "shared-functions"="scripts/modules/shared-functions.rsc";
+  "telegram-api"="scripts/modules/telegram-api.rsc";
+  "bot-core"="scripts/bot-core.rsc";
+  "monitoring"="scripts/modules/monitoring.rsc";
+  "script-registry"="scripts/modules/script-registry.rsc";
+  "auto-updater"="scripts/modules/auto-updater.rsc"
+});
+
+# ============================================================================
+# PULL MODULE FROM GITHUB
+# ============================================================================
+
+:global PullModuleFromGitHub do={
+  :local ModuleName [:tostr $1];
+  :global GitHubRawBase;
+  :global GitHubModules;
+  :global CertificateAvailable;
+
+  :local ModulePath ($GitHubModules->$ModuleName);
+  :if ([:len $ModulePath] = 0) do={
+    :return ({success=false; error="Module not in sync list"});
+  }
+
+  :local Url ($GitHubRawBase . "/" . $ModulePath);
+  :local LocalPath [:pick $ModulePath ([:find $ModulePath "/"] + 1) [:len $ModulePath]];
+
+  :log info ("[auto-updater] - Pulling " . $ModuleName . " from GitHub");
+
+  :onerror FetchErr {
+    :if ([$CertificateAvailable "ISRG Root X1"] = false) do={
+      /tool/fetch check-certificate=no url=$Url dst-path=$LocalPath;
+    } else={
+      /tool/fetch check-certificate=yes-without-crl url=$Url dst-path=$LocalPath;
+    }
+
+    # Reimport the module
+    :onerror ImportErr {
+      /import $LocalPath;
+    } do={
+      :log warning ("[auto-updater] - Import failed for " . $ModuleName . ": " . $ImportErr);
+    }
+
+    :log info ("[auto-updater] - Updated " . $ModuleName);
+    :return ({success=true; module=$ModuleName});
+  } do={
+    :log error ("[auto-updater] - Failed to fetch " . $ModuleName . ": " . $FetchErr);
+    :return ({success=false; error=$FetchErr});
+  }
+}
+
+# ============================================================================
+# PULL ALL MODULES FROM GITHUB
+# ============================================================================
+
+:global PullAllFromGitHub do={
+  :global GitHubModules;
+  :global PullModuleFromGitHub;
+  :global SendTelegram2;
+  :global TelegramChatId;
+
+  :local SuccessCount 0;
+  :local FailCount 0;
+  :local Results ({});
+
+  :foreach ModuleName,Path in=$GitHubModules do={
+    :local Result [$PullModuleFromGitHub $ModuleName];
+    :if (($Result->"success") = true) do={
+      :set SuccessCount ($SuccessCount + 1);
+    } else={
+      :set FailCount ($FailCount + 1);
+    }
+    :set ($Results->$ModuleName) $Result;
+  }
+
+  :local Msg ("🔄 GitHub Sync: " . $SuccessCount . " updated");
+  :if ($FailCount > 0) do={
+    :set Msg ($Msg . ", " . $FailCount . " failed");
+  }
+
+  $SendTelegram2 ({
+    chatid=$TelegramChatId;
+    silent=true;
+    subject="🔄 TxMTC GitHub Sync";
+    message=$Msg
+  });
+
+  :log info ("[auto-updater] - GitHub sync complete: " . $SuccessCount . " success, " . $FailCount . " failed");
+  :return ({success=($FailCount = 0); updated=$SuccessCount; failed=$FailCount; details=$Results});
+}
+
+# ============================================================================
+# START GITHUB SYNC SCHEDULER
+# ============================================================================
+
+:global StartGitHubSync do={
+  :local Interval $1;
+  :if ([:typeof $Interval] != "time") do={ :set Interval 1h; }
+
+  # Remove existing scheduler if present
+  :onerror Err {
+    /system scheduler remove [find name="txmtc-github-sync"];
+  } do={}
+
+  # Create new scheduler
+  /system scheduler add \
+    name="txmtc-github-sync" \
+    interval=$Interval \
+    on-event=":global PullAllFromGitHub; [\$PullAllFromGitHub]" \
+    comment="TxMTC GitHub Auto-Sync";
+
+  :log info ("[auto-updater] - GitHub sync scheduler started (interval: " . $Interval . ")");
+}
+
+# ============================================================================
+# STOP GITHUB SYNC SCHEDULER
+# ============================================================================
+
+:global StopGitHubSync do={
+  :onerror Err {
+    /system scheduler remove [find name="txmtc-github-sync"];
+  } do={}
+
+  :log info "[auto-updater] - GitHub sync scheduler stopped";
+}
+
 # ============================================================================
 # GET INSTALLED SCRIPTS WITH VERSIONS
 # ============================================================================
