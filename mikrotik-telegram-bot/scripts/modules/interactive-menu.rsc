@@ -124,7 +124,7 @@
     :if ([:typeof $CmdOrArray] = "array") do={
       # Nested array - process each command
       :foreach Cmd in=$CmdOrArray do={
-        :set ($Row->[:len $Row]) ({text=$Cmd; callback_data=("cmd:" . $Cmd)});
+        :set ($Row->[:len $Row]) ({"text"=$Cmd; "callback_data"=("cmd:" . $Cmd)});
         :set Count ($Count + 1);
         :if ($Count = 2) do={
           :set ($Result->[:len $Result]) $Row;
@@ -134,7 +134,7 @@
       }
     } else={
       # Single command string
-      :set ($Row->[:len $Row]) ({text=$CmdOrArray; callback_data=("cmd:" . $CmdOrArray)});
+      :set ($Row->[:len $Row]) ({"text"=$CmdOrArray; "callback_data"=("cmd:" . $CmdOrArray)});
       :set Count ($Count + 1);
       :if ($Count = 2) do={
         :set ($Result->[:len $Result]) $Row;
@@ -182,8 +182,8 @@
     :if ($Cat = "misc") do={ :set Emoji "📦"; }
     
     :set ($CurrentRow->[:len $CurrentRow]) ({
-      text=($Emoji . " " . $CatName);
-      callback_data=("cat:" . $Cat)
+      "text"=($Emoji . " " . $CatName);
+      "callback_data"=("cat:" . $Cat)
     });
     :set RowCount ($RowCount + 1);
     :if ($RowCount >= 2) do={
@@ -198,24 +198,24 @@
   
   # Action buttons
   :set ($Buttons->[:len $Buttons]) ({
-    {text="📥 Install Script"; callback_data="menu:install"};
-    {text="🔍 Search"; callback_data="menu:search"}
+    {"text"="📥 Install Script"; "callback_data"="menu:install"};
+    {"text"="🔍 Search"; "callback_data"="menu:search"}
   });
   :set ($Buttons->[:len $Buttons]) ({
-    {text="🌐 Hotspot"; callback_data="menu:hotspot"};
-    {text="🌉 Bridge/VLAN"; callback_data="menu:bridge"}
+    {"text"="🌐 Hotspot"; "callback_data"="menu:hotspot"};
+    {"text"="🌉 Bridge/VLAN"; "callback_data"="menu:bridge"}
   });
   :set ($Buttons->[:len $Buttons]) ({
-    {text="⚙️ Settings"; callback_data="menu:settings"};
-    {text="📊 Monitoring"; callback_data="cmd:/monitoring-settings"}
+    {"text"="⚙️ Settings"; "callback_data"="menu:settings"};
+    {"text"="📊 Monitoring"; "callback_data"="cmd:/monitoring-settings"}
   });
   :set ($Buttons->[:len $Buttons]) ({
-    {text="🤖 Error Monitor"; callback_data="menu:error-monitor"};
-    {text="🛠️ Setup"; callback_data="menu:setup"}
+    {"text"="🤖 Error Monitor"; "callback_data"="menu:error-monitor"};
+    {"text"="🛠️ Setup"; "callback_data"="menu:setup"}
   });
   :set ($Buttons->[:len $Buttons]) ({
-    {text="🌐 Routers"; callback_data="menu:routers"};
-    {text="❌ Close"; callback_data="menu:close"}
+    {"text"="🌐 Routers"; "callback_data"="menu:routers"};
+    {"text"="❌ Close"; "callback_data"="menu:close"}
   });
   
   :local KeyboardJSON [$CreateInlineKeyboard $Buttons];
@@ -292,7 +292,7 @@
   :if ($TotalScripts = 0) do={
     :local NoScriptsText ("*" . $Category . " Scripts*\n\nNo scripts available in this category.");
     :set ($Buttons->[:len $Buttons]) ({
-      {text="🔙 Back"; callback_data="menu:main"}
+      {"text"="🔙 Back"; "callback_data"="menu:main"}
     });
 
     :local KeyboardJSON [$CreateInlineKeyboard $Buttons];
@@ -335,7 +335,7 @@
       }
 
       :set ($Buttons->[:len $Buttons]) ({
-        {text=$ButtonText; callback_data=("script:" . $ScriptId)}
+        {"text"=$ButtonText; "callback_data"=("script:" . $ScriptId)}
       });
     }
     :set Idx ($Idx + 1);
@@ -346,18 +346,18 @@
     :local PageButtons ({});
     :if ($Page > 1) do={
       :set ($PageButtons->[:len $PageButtons]) {
-        text="◀️ Prev";
-        callback_data=("catpage:" . $Category . ":" . ($Page - 1))
+        "text"="◀️ Prev";
+        "callback_data"=("catpage:" . $Category . ":" . ($Page - 1))
       };
     }
     :set ($PageButtons->[:len $PageButtons]) {
-      text=([:tostr $Page] . "/" . [:tostr $TotalPages]);
-      callback_data="noop"
+      "text"=([:tostr $Page] . "/" . [:tostr $TotalPages]);
+      "callback_data"="noop"
     };
     :if ($Page < $TotalPages) do={
       :set ($PageButtons->[:len $PageButtons]) {
-        text="Next ▶️";
-        callback_data=("catpage:" . $Category . ":" . ($Page + 1))
+        "text"="Next ▶️";
+        "callback_data"=("catpage:" . $Category . ":" . ($Page + 1))
       };
     }
     :set ($Buttons->[:len $Buttons]) $PageButtons;
@@ -365,7 +365,7 @@
 
   # Navigation buttons
   :set ($Buttons->[:len $Buttons]) ({
-    {text="🔙 Back"; callback_data="menu:main"}
+    {"text"="🔙 Back"; "callback_data"="menu:main"}
   });
 
   :local CategoryName $Category;
@@ -442,15 +442,15 @@
   :local Buttons ({});
   :if ($IsInstalled = false) do={
     :set ($Buttons->[:len $Buttons]) ({
-      {text="📥 Install"; callback_data=("install:" . $ScriptId)}
+      {"text"="📥 Install"; "callback_data"=("install:" . $ScriptId)}
     });
   } else={
     :set ($Buttons->[:len $Buttons]) ({
-      {text="🗑️ Uninstall"; callback_data=("uninstall-ask:" . $ScriptId)}
+      {"text"="🗑️ Uninstall"; "callback_data"=("uninstall-ask:" . $ScriptId)}
     });
   }
   :set ($Buttons->[:len $Buttons]) ({
-    {text="🔙 Back"; callback_data=("cat:" . $Category)}
+    {"text"="🔙 Back"; "callback_data"=("cat:" . $Category)}
   });
   
   :local KeyboardJSON [$CreateInlineKeyboard $Buttons];
@@ -541,7 +541,7 @@
       :set SearchMsg ($SearchMsg . "_Example: @TxMTC\\_bot backup_");
 
       :local Buttons ({{
-        {text="🔙 Back"; callback_data="menu:main"}
+        {"text"="🔙 Back"; "callback_data"="menu:main"}
       }});
       :local KeyboardJson [$CreateInlineKeyboard $Buttons];
 
@@ -632,9 +632,9 @@
     :set ConfirmMsg ($ConfirmMsg . "_This action cannot be undone._");
 
     :local ConfirmButtons ({{
-      {text="✅ Yes, Uninstall"; callback_data=("uninstall-confirm:" . $ScriptId)}
+      {"text"="✅ Yes, Uninstall"; "callback_data"=("uninstall-confirm:" . $ScriptId)}
     }; {
-      {text="❌ Cancel"; callback_data=("script:" . $ScriptId)}
+      {"text"="❌ Cancel"; "callback_data"=("script:" . $ScriptId)}
     }});
 
     :local KeyboardJSON [$CreateInlineKeyboard $ConfirmButtons];
@@ -955,16 +955,16 @@
   :set SettingsMsg ($SettingsMsg . "Use `/monitor-interfaces` to configure\\.");
   
   :local Buttons ({{
-    {text="Toggle CPU"; callback_data="monitoring-settings:toggle:cpu"};
-    {text="Toggle RAM"; callback_data="monitoring-settings:toggle:ram"}
+    {"text"="Toggle CPU"; "callback_data"="monitoring-settings:toggle:cpu"};
+    {"text"="Toggle RAM"; "callback_data"="monitoring-settings:toggle:ram"}
   }; {
-    {text="Toggle Disk"; callback_data="monitoring-settings:toggle:disk"};
-    {text="Toggle Interfaces"; callback_data="monitoring-settings:toggle:interfaces"}
+    {"text"="Toggle Disk"; "callback_data"="monitoring-settings:toggle:disk"};
+    {"text"="Toggle Interfaces"; "callback_data"="monitoring-settings:toggle:interfaces"}
   }; {
-    {text="Toggle Internet"; callback_data="monitoring-settings:toggle:internet"};
-    {text="🔌 Interfaces"; callback_data="cmd:/monitor-interfaces list"}
+    {"text"="Toggle Internet"; "callback_data"="monitoring-settings:toggle:internet"};
+    {"text"="🔌 Interfaces"; "callback_data"="cmd:/monitor-interfaces list"}
   }; {
-    {text="🔙 Back"; callback_data="menu:main"}
+    {"text"="🔙 Back"; "callback_data"="menu:main"}
   }});
 
   :local KeyboardJson [$CreateInlineKeyboard $Buttons];
@@ -1050,12 +1050,12 @@
   :if ($ErrorMonitorAutoFix = true) do={ :set AutoFixText "Disable Auto-Fix"; }
 
   :local Buttons ({{
-    {text=$ToggleText; callback_data="error-monitor:toggle"}
+    {"text"=$ToggleText; "callback_data"="error-monitor:toggle"}
   }; {
-    {text=$AutoFixText; callback_data="error-monitor:autofix"};
-    {text="🔍 Scan Now"; callback_data="error-monitor:scan"}
+    {"text"=$AutoFixText; "callback_data"="error-monitor:autofix"};
+    {"text"="🔍 Scan Now"; "callback_data"="error-monitor:scan"}
   }; {
-    {text="🔙 Back"; callback_data="menu:main"}
+    {"text"="🔙 Back"; "callback_data"="menu:main"}
   }});
 
   :local KeyboardJson [$CreateInlineKeyboard $Buttons];
@@ -1119,13 +1119,13 @@
   :set SettingsMsg ($SettingsMsg . "_Tap buttons below to toggle settings._");
 
   :local Buttons ({{
-    {text="🔔 Notifications"; callback_data="settings:toggle:notifications"};
-    {text="📊 Daily Summary"; callback_data="settings:toggle:summary"}
+    {"text"="🔔 Notifications"; "callback_data"="settings:toggle:notifications"};
+    {"text"="📊 Daily Summary"; "callback_data"="settings:toggle:summary"}
   }; {
-    {text="🧹 Auto Cleanup"; callback_data="settings:toggle:cleanup"};
-    {text="📈 Auto Monitor"; callback_data="settings:toggle:monitoring"}
+    {"text"="🧹 Auto Cleanup"; "callback_data"="settings:toggle:cleanup"};
+    {"text"="📈 Auto Monitor"; "callback_data"="settings:toggle:monitoring"}
   }; {
-    {text="🔙 Back"; callback_data="menu:main"}
+    {"text"="🔙 Back"; "callback_data"="menu:main"}
   }});
 
   :local KeyboardJson [$CreateInlineKeyboard $Buttons];
