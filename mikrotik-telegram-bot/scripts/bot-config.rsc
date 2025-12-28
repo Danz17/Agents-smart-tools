@@ -474,6 +474,29 @@
 })
 
 # ============================================================================
+# ADAPTIVE POLLING SETTINGS
+# ============================================================================
+# Dynamic polling interval based on user activity
+# Faster polling when user is active, slower when idle
+
+# Last message received timestamp (seconds since midnight)
+:global LastMessageTime;
+:if ([:typeof $LastMessageTime] != "num") do={ :set LastMessageTime 0; }
+
+# Polling interval when user is active (just received a message)
+:global ActivePollingInterval 5s;
+
+# Polling interval when user is idle (no messages for IdleThreshold)
+:global IdlePollingInterval 30s;
+
+# Time in seconds before switching to idle polling (10 minutes = 600 seconds)
+:global IdleThreshold 600;
+
+# Message context tracking for reply-based router routing
+:global MessageContextMap;
+:if ([:typeof $MessageContextMap] != "array") do={ :set MessageContextMap ({}); }
+
+# ============================================================================
 # RUNTIME STATE (initialized if missing)
 # ============================================================================
 

@@ -159,6 +159,18 @@
   :global CreateCommandButtons;
   :global EditTelegramMessage;
   :global SendOrUpdateMessage;
+
+  # Adaptive polling functions
+  :global AdjustPollingInterval;
+  :global UpdateLastMessageTime;
+  :global LastMessageTime;
+
+  # Message context tracking for reply-based routing
+  :global GetMessageContextByReply;
+  :global SendTelegramWithContext;
+  :global TrackMessageContext;
+  :global GetQuickActionsForContext;
+  :global DetectMessageContext;
   
   # ============================================================================
   # HELPER: SEND BOT REPLY WITH BUTTONS
@@ -287,6 +299,14 @@
     } do={
       :log debug ($ScriptName . " - Update check skipped (module not available)");
     }
+  }
+
+  # ============================================================================
+  # ADAPTIVE POLLING - Adjust interval based on activity
+  # ============================================================================
+
+  :if ([:typeof $AdjustPollingInterval] = "array") do={
+    [$AdjustPollingInterval];
   }
 
   # ============================================================================
@@ -541,14 +561,27 @@
 
     :local IsAnyReply ([:typeof ($Message->"reply_to_message")] = "array");
     :local IsMyReply false;
+    :local ReplyRouterContext ({});
+    :local TargetRouter "";
+
     :if ($IsAnyReply = true) do={
       :local ReplyMsgId [:tostr ($Message->"reply_to_message"->"message_id")];
       :if ([:typeof ($TelegramMessageIDs->$ReplyMsgId)] != "nothing" && \
            ($TelegramMessageIDs->$ReplyMsgId) = 1) do={
         :set IsMyReply true;
       }
+
+      # Check for router context in reply (for multi-router routing)
+      :if ([:typeof $GetMessageContextByReply] = "array") do={
+        :set ReplyRouterContext [$GetMessageContextByReply $ReplyMsgId];
+        :if ([:typeof $ReplyRouterContext] = "array" && [:len ($ReplyRouterContext->"router")] > 0) do={
+          :set TargetRouter ($ReplyRouterContext->"router");
+          :set IsMyReply true;
+          :log debug ("[bot-core] - Reply routed to: " . $TargetRouter);
+        }
+      }
     }
-    
+
     # Process message if update_id is >= current offset
     # (Always process new messages, regardless of reply status or uptime)
     :if ($UpdateID >= $TelegramChatOffset->2) do={
@@ -576,7 +609,12 @@
 
       :if ($Trusted = true) do={
         :local Done false;
-        
+
+        # Update activity timestamp for adaptive polling
+        :if ([:typeof $UpdateLastMessageTime] = "array") do={
+          [$UpdateLastMessageTime];
+        }
+
         # Check if user is blocked
         :if ([:typeof $IsUserBlocked] = "array" && [$IsUserBlocked $FromId] = true) do={
           :log warning ($ScriptName . " - Blocked user " . $FromId . " attempted access");
@@ -1834,8 +1872,62 @@
             }
             
             :if ($SyntaxValid = true) do={
-              :local State "";
-              :local TmpFile ("tmpfs/telegram-bot-" . $UpdateID);
+              # Check if this command should be routed to a specific router (reply-based routing)
+              :local ExecuteRemote false;
+              :local LocalIdentity [/system identity get name];
+              :if ([:len $TargetRouter] > 0 && $TargetRouter != "local" && $TargetRouter != $LocalIdentity) do={
+                :set ExecuteRemote true;
+              }
+
+              :if ($ExecuteRemote = true) do={
+                # Route command to target router via multi-router module
+                :global MultiRouterLoaded;
+                :if ($MultiRouterLoaded != true) do={
+                  :onerror LoadErr {
+                    /system script run "modules/multi-router";
+                  } do={
+                    :log warning "[bot-core] - Could not load multi-router module for reply routing";
+                  }
+                }
+                :global ExecuteRemoteCommand;
+                :if ([:typeof $ExecuteRemoteCommand] = "array") do={
+                  :log info ($ScriptName . " - Reply routing to router: " . $TargetRouter);
+                  :local Result [$ExecuteRemoteCommand $TargetRouter $Command];
+                  :local ResponseMsg "";
+                  :if (($Result->"success") = true) do={
+                    :set ResponseMsg ("*🖥️ " . $TargetRouter . "* executed:\n`" . $Command . "`\n\n");
+                    :local ResultData ($Result->"result");
+                    :if ([:typeof $ResultData] = "array") do={
+                      :foreach Item in=$ResultData do={
+                        :set ResponseMsg ($ResponseMsg . $Item . "\n");
+                      }
+                    } else={
+                      :set ResponseMsg ($ResponseMsg . "📝 Output:\n`" . [:tostr $ResultData] . "`");
+                    }
+                  } else={
+                    :set ResponseMsg ("❌ Failed on *" . $TargetRouter . "*\n\n" . ($Result->"error"));
+                  }
+
+                  # Send result with quick actions
+                  :local RouterCmds ({{"/routers"; "/routers status " . $TargetRouter; "/menu"}});
+                  :local RouterButtons [$CreateCommandButtons $RouterCmds];
+
+                  # Track message context for future replies
+                  :local SentMsgId [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $ResponseMsg $RouterButtons $ThreadId [:tostr ($Message->"message_id")]];
+                  :if ([:typeof $TrackMessageContext] = "array" && [:len $SentMsgId] > 0) do={
+                    [$TrackMessageContext $SentMsgId $TargetRouter "command"];
+                  }
+                } else={
+                  :log error "[bot-core] - ExecuteRemoteCommand not available for reply routing";
+                  $SendTelegram2 ({ chatid=($Chat->"id"); silent=false; \
+                    replyto=($Message->"message_id"); threadid=$ThreadId; \
+                    subject="⚡ TxMTC | Error"; \
+                    message=("Multi-router module not available for routing to " . $TargetRouter) });
+                }
+              } else={
+                # Local execution (original code path)
+                :local State "";
+                :local TmpFile ("tmpfs/telegram-bot-" . $UpdateID);
               
               :log info ($ScriptName . " - Executing: " . $Command);
               :execute script=(":do {\n" . $Command . "\n} on-error={ /file/add name=\"" . $TmpFile . ".failed\" };" . \
@@ -1888,7 +1980,19 @@
               
               # Build result message
               :local ResultMsg ("⚙️ Command:\n`" . $Command . "`\n\n" . $State . $OutputText);
-              
+
+              # Detect context for quick action buttons
+              :local MsgContext "command";
+              :if ([:typeof $DetectMessageContext] = "array") do={
+                :set MsgContext [$DetectMessageContext $Command $ResultMsg];
+              }
+
+              # Get quick action buttons based on context
+              :local QuickButtons ({});
+              :if ([:typeof $GetQuickActionsForContext] = "array") do={
+                :set QuickButtons [$GetQuickActionsForContext $MsgContext];
+              }
+
               # Track command message ID for editing
               :global TelegramMessageHistory;
               :global LoadBotState;
@@ -1911,23 +2015,27 @@
                 :if ($EditResult = true) do={
                   :log debug ($ScriptName . " - Edited command result message");
                 } else={
-                  # Message deleted, send new
-                  :local NewMsgId [$SendTelegram2 ({ chatid=($Chat->"id"); silent=true; \
-                    replyto=($Message->"message_id"); threadid=$ThreadId; \
-                    subject="⚡ TxMTC | Result"; message=$ResultMsg })];
+                  # Message deleted, send new with quick actions
+                  :local NewMsgId [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $ResultMsg $QuickButtons $ThreadId [:tostr ($Message->"message_id")]];
                   :if ([:len $NewMsgId] > 0) do={
                     :set ($TelegramMessageHistory->$CommandMsgKey) $NewMsgId;
                     [$SaveBotState "message-history" $TelegramMessageHistory];
+                    # Track context for reply routing
+                    :if ([:typeof $TrackMessageContext] = "array") do={
+                      [$TrackMessageContext $NewMsgId "local" $MsgContext];
+                    }
                   }
                 }
               } else={
-                # Send new message for long outputs or first time
-                :local NewMsgId [$SendTelegram2 ({ chatid=($Chat->"id"); silent=true; \
-                  replyto=($Message->"message_id"); threadid=$ThreadId; \
-                  subject="⚡ TxMTC | Result"; message=$ResultMsg })];
+                # Send new message with quick action buttons
+                :local NewMsgId [$SendBotReplyWithButtons [:tostr ($Chat->"id")] $ResultMsg $QuickButtons $ThreadId [:tostr ($Message->"message_id")]];
                 :if ([:len $NewMsgId] > 0) do={
                   :set ($TelegramMessageHistory->$CommandMsgKey) $NewMsgId;
                   [$SaveBotState "message-history" $TelegramMessageHistory];
+                  # Track context for reply routing
+                  :if ([:typeof $TrackMessageContext] = "array") do={
+                    [$TrackMessageContext $NewMsgId "local" $MsgContext];
+                  }
                 }
               }
               
@@ -1935,6 +2043,7 @@
               :if ([:len [/file find name=$TmpFile]] > 0) do={ /file remove $TmpFile; }
               :if ([:len [/file find name=($TmpFile . ".done")]] > 0) do={ /file remove ($TmpFile . ".done"); }
               :if ([:len [/file find name=($TmpFile . ".failed")]] > 0) do={ /file remove ($TmpFile . ".failed"); }
+              }
             } else={
               :log info ($ScriptName . " - Syntax validation failed for update " . $UpdateID);
               $SendTelegram2 ({ chatid=($Chat->"id"); silent=false; \

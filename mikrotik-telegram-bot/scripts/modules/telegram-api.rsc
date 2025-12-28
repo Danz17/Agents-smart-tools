@@ -744,6 +744,136 @@
 }
 
 # ============================================================================
+# MESSAGE CONTEXT TRACKING (for reply-based routing)
+# ============================================================================
+
+# Track message context for reply-based router routing
+:global TrackMessageContext do={
+  :local MsgId [:tostr $1];
+  :local RouterId [:tostr $2];
+  :local Context [:tostr $3];
+
+  :global MessageContextMap;
+  :global SaveBotState;
+
+  # Initialize if needed
+  :if ([:typeof $MessageContextMap] != "array") do={
+    :set MessageContextMap ({});
+  }
+
+  # Get current time for expiry tracking
+  :local Now [/system clock get time];
+  :local NowStr [:tostr $Now];
+  :local Hours [:tonum [:pick $NowStr 0 2]];
+  :local Minutes [:tonum [:pick $NowStr 3 5]];
+  :local Seconds [:tonum [:pick $NowStr 6 8]];
+  :local TimeSec (($Hours * 3600) + ($Minutes * 60) + $Seconds);
+
+  # Store context
+  :set ($MessageContextMap->$MsgId) ({
+    "router"=$RouterId;
+    "context"=$Context;
+    "time"=$TimeSec
+  });
+
+  # Save to persistent storage
+  [$SaveBotState "message-context" $MessageContextMap];
+
+  :log debug ("[telegram-api] Tracked message " . $MsgId . " for router " . $RouterId);
+}
+
+# Get context for a reply message
+:global GetMessageContextByReply do={
+  :local ReplyToMsgId [:tostr $1];
+
+  :global MessageContextMap;
+  :global LoadBotState;
+
+  # Load from storage if not in memory
+  :if ([:typeof $MessageContextMap] != "array") do={
+    :local Loaded [$LoadBotState "message-context"];
+    :if ([:typeof $Loaded] = "array") do={
+      :set MessageContextMap $Loaded;
+    } else={
+      :set MessageContextMap ({});
+    }
+  }
+
+  # Check if we have context for this message
+  :if ([:typeof ($MessageContextMap->$ReplyToMsgId)] = "array") do={
+    :return ($MessageContextMap->$ReplyToMsgId);
+  }
+
+  :return ({});
+}
+
+# Clean up old message contexts (older than 24 hours)
+:global CleanupMessageContexts do={
+  :global MessageContextMap;
+  :global SaveBotState;
+
+  :if ([:typeof $MessageContextMap] != "array") do={
+    :return 0;
+  }
+
+  # Get current time
+  :local Now [/system clock get time];
+  :local NowStr [:tostr $Now];
+  :local Hours [:tonum [:pick $NowStr 0 2]];
+  :local Minutes [:tonum [:pick $NowStr 3 5]];
+  :local Seconds [:tonum [:pick $NowStr 6 8]];
+  :local NowSec (($Hours * 3600) + ($Minutes * 60) + $Seconds);
+
+  :local NewMap ({});
+  :local Cleaned 0;
+  :local MaxAge 86400;
+
+  :foreach MsgId,CtxData in=$MessageContextMap do={
+    :local MsgTime ($CtxData->"time");
+    :local Age ($NowSec - $MsgTime);
+    :if ($Age < 0) do={ :set Age ($Age + 86400); }
+
+    :if ($Age < $MaxAge) do={
+      :set ($NewMap->$MsgId) $CtxData;
+    } else={
+      :set Cleaned ($Cleaned + 1);
+    }
+  }
+
+  :set MessageContextMap $NewMap;
+  [$SaveBotState "message-context" $MessageContextMap];
+
+  :return $Cleaned;
+}
+
+# ============================================================================
+# SEND MESSAGE WITH CONTEXT TRACKING
+# ============================================================================
+
+:global SendTelegramWithContext do={
+  :local Notification $1;
+  :local Context [:tostr $2];
+
+  :global SendTelegram2;
+  :global TrackMessageContext;
+  :global Identity;
+
+  # Send the message
+  :local MsgId [$SendTelegram2 $Notification];
+
+  # Track context if message was sent successfully
+  :if ([:len $MsgId] > 0 && $MsgId != "0") do={
+    :local RouterId $Identity;
+    :if ([:len $RouterId] = 0) do={
+      :set RouterId [/system identity get name];
+    }
+    [$TrackMessageContext $MsgId $RouterId $Context];
+  }
+
+  :return $MsgId;
+}
+
+# ============================================================================
 # INITIALIZATION FLAG
 # ============================================================================
 

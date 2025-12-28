@@ -455,6 +455,64 @@
 }
 
 # ============================================================================
+# ADAPTIVE POLLING INTERVAL
+# ============================================================================
+
+:global AdjustPollingInterval do={
+  :global LastMessageTime;
+  :global ActivePollingInterval;
+  :global IdlePollingInterval;
+  :global IdleThreshold;
+
+  # Get current time in seconds since midnight
+  :local Now [/system clock get time];
+  :local NowStr [:tostr $Now];
+  :local Hours [:tonum [:pick $NowStr 0 2]];
+  :local Minutes [:tonum [:pick $NowStr 3 5]];
+  :local Seconds [:tonum [:pick $NowStr 6 8]];
+  :local NowSec (($Hours * 3600) + ($Minutes * 60) + $Seconds);
+
+  # Calculate idle time (handle midnight rollover)
+  :local IdleSec ($NowSec - $LastMessageTime);
+  :if ($IdleSec < 0) do={
+    :set IdleSec ($IdleSec + 86400);
+  }
+
+  # Determine target interval based on activity
+  :local Target $ActivePollingInterval;
+  :if ($IdleSec > $IdleThreshold) do={
+    :set Target $IdlePollingInterval;
+  }
+
+  # Update scheduler if interval changed
+  :onerror SchedErr {
+    :local Current [/system scheduler get [find name="telegram-bot"] interval];
+    :if ($Current != $Target) do={
+      /system scheduler set [find name="telegram-bot"] interval=$Target;
+      :log info ("[bot] Polling interval: " . $Target);
+    }
+  } do={
+    :log warning "[bot] Scheduler 'telegram-bot' not found";
+  }
+}
+
+# ============================================================================
+# UPDATE LAST MESSAGE TIME
+# ============================================================================
+
+:global UpdateLastMessageTime do={
+  :global LastMessageTime;
+
+  # Get current time in seconds since midnight
+  :local Now [/system clock get time];
+  :local NowStr [:tostr $Now];
+  :local Hours [:tonum [:pick $NowStr 0 2]];
+  :local Minutes [:tonum [:pick $NowStr 3 5]];
+  :local Seconds [:tonum [:pick $NowStr 6 8]];
+  :set LastMessageTime (($Hours * 3600) + ($Minutes * 60) + $Seconds);
+}
+
+# ============================================================================
 # INITIALIZATION FLAG
 # ============================================================================
 

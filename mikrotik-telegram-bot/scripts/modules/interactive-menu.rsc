@@ -1153,6 +1153,121 @@
 }
 
 # ============================================================================
+# GET QUICK ACTIONS FOR CONTEXT
+# ============================================================================
+# Returns context-aware quick action buttons based on message type
+
+:global GetQuickActionsForContext do={
+  :local Context [:tostr $1];
+  :local Buttons ({});
+
+  # Status/System context
+  :if ($Context = "status" || $Context = "system") do={
+    :set ($Buttons->0) ({
+      {"text"="🔄 Refresh"; "callback_data"="cmd:/status"};
+      {"text"="📶 Interfaces"; "callback_data"="cmd:/interfaces"}
+    });
+    :set ($Buttons->1) ({
+      {"text"="📋 DHCP"; "callback_data"="cmd:/dhcp"};
+      {"text"="📊 Resources"; "callback_data"="cmd:/system resource print"}
+    });
+  }
+
+  # Hotspot context
+  :if ($Context = "hotspot") do={
+    :set ($Buttons->0) ({
+      {"text"="👥 Users"; "callback_data"="hotspot:users"};
+      {"text"="➕ Add User"; "callback_data"="hotspot:add"}
+    });
+    :set ($Buttons->1) ({
+      {"text"="➖ Remove"; "callback_data"="hotspot:remove"};
+      {"text"="📊 Stats"; "callback_data"="hotspot:stats"}
+    });
+  }
+
+  # Monitoring context
+  :if ($Context = "monitoring" || $Context = "alert") do={
+    :set ($Buttons->0) ({
+      {"text"="⚙️ Settings"; "callback_data"="cmd:/monitoring-settings"};
+      {"text"="🔇 Silence 1h"; "callback_data"="cmd:/silence 1h"}
+    });
+    :set ($Buttons->1) ({
+      {"text"="📊 Status"; "callback_data"="cmd:/status"};
+      {"text"="📋 Logs"; "callback_data"="cmd:/log print count=10"}
+    });
+  }
+
+  # Network context
+  :if ($Context = "network" || $Context = "interfaces") do={
+    :set ($Buttons->0) ({
+      {"text"="📶 Interfaces"; "callback_data"="cmd:/interface print stats"};
+      {"text"="🛣️ Routes"; "callback_data"="cmd:/ip route print"}
+    });
+    :set ($Buttons->1) ({
+      {"text"="🔥 Firewall"; "callback_data"="cmd:/ip firewall filter print stats"};
+      {"text"="📋 ARP"; "callback_data"="cmd:/ip arp print"}
+    });
+  }
+
+  # Backup context
+  :if ($Context = "backup") do={
+    :set ($Buttons->0) ({
+      {"text"="💾 Create Backup"; "callback_data"="cmd:/backup now"};
+      {"text"="📤 Export"; "callback_data"="cmd:/export file=manual-export"}
+    });
+  }
+
+  # Error/Log context
+  :if ($Context = "error" || $Context = "logs") do={
+    :set ($Buttons->0) ({
+      {"text"="📋 Recent Logs"; "callback_data"="cmd:/log print count=20"};
+      {"text"="⚠️ Errors Only"; "callback_data"="cmd:/errors"}
+    });
+    :set ($Buttons->1) ({
+      {"text"="🧹 Clear Logs"; "callback_data"="cmd:/system logging action set memory memory-lines=1"};
+      {"text"="🔄 Refresh"; "callback_data"="cmd:/log print count=10"}
+    });
+  }
+
+  # Default/General context (always add navigation row)
+  :if ([:len $Buttons] = 0) do={
+    :set ($Buttons->0) ({
+      {"text"="📊 Status"; "callback_data"="cmd:/status"};
+      {"text"="📶 Interfaces"; "callback_data"="cmd:/interfaces"}
+    });
+  }
+
+  # Add navigation row at the end
+  :set ($Buttons->[:len $Buttons]) ({
+    {"text"="📋 Menu"; "callback_data"="menu:main"};
+    {"text"="🖥️ Routers"; "callback_data"="menu:routers"}
+  });
+
+  :return $Buttons;
+}
+
+# ============================================================================
+# GET CONTEXT FROM MESSAGE CONTENT
+# ============================================================================
+# Analyzes message text to determine context for quick actions
+
+:global DetectMessageContext do={
+  :local MessageText [:tostr $1];
+  :local LowerText $MessageText;
+
+  # Try to detect context from keywords
+  :if ($MessageText ~ "(?i)(hotspot|user|voucher)") do={ :return "hotspot"; }
+  :if ($MessageText ~ "(?i)(cpu|ram|memory|disk|uptime|resource)") do={ :return "status"; }
+  :if ($MessageText ~ "(?i)(interface|ether|bridge|wlan|vlan)") do={ :return "network"; }
+  :if ($MessageText ~ "(?i)(backup|export|restore)") do={ :return "backup"; }
+  :if ($MessageText ~ "(?i)(error|warning|critical|failed)") do={ :return "error"; }
+  :if ($MessageText ~ "(?i)(monitor|alert|threshold)") do={ :return "monitoring"; }
+  :if ($MessageText ~ "(?i)(log|event|message)") do={ :return "logs"; }
+
+  :return "general";
+}
+
+# ============================================================================
 # INITIALIZATION FLAG
 # ============================================================================
 
